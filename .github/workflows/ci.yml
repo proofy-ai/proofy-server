@@ -1,0 +1,24 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: 의존성 설치
+        run: uv sync --locked
+      - name: 린트
+        run: uv run ruff check .
+      - name: 테스트 (API 키 없이 scripted 모드)
+        run: uv run python -m pytest -q
+        env:
+          AGENT_LLM: scripted
