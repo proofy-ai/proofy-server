@@ -44,7 +44,6 @@ DISABLE_SQLALCHEMY_CEXT=1 uv sync --no-binary-package sqlalchemy --reinstall-pac
 | 이름 | 기본값 | 설명 |
 |---|---|---|
 | `DATABASE_URL` | `sqlite:///./proofy.sqlite3` | 배포는 Postgres |
-| `UPLOAD_DIR` | `uploads` | 올린 서류 저장 폴더 |
 | `CORS_ORIGINS` | `http://localhost:5173` | 쉼표로 구분한 FE 주소 |
 | `AGENT_LLM` | `scripted` | `scripted`(가짜 분석) 또는 `claude` |
 | `DEMO_MODE` | `true` | 시연용 안내 표시 여부(계약 4.1) |

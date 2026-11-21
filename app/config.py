@@ -10,7 +10,6 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     database_url: str = "sqlite:///./proofy.sqlite3"
-    upload_dir: str = "uploads"
     # 쉼표로 구분한 FE 주소 목록
     cors_origins: str = "http://localhost:5173"
     # scripted: Claude를 부르지 않는 가짜 분석(계약 7절), claude: 실제 분석

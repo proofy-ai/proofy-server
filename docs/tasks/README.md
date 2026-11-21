@@ -62,7 +62,7 @@ T00 규칙
 | [T02](T02-deadline.md) | D-day 계산 | 1·2·3 | 완료 | #4 | #23 |
 | [T03](T03-cases-api.md) | 사건 API | 4·5·7 | 완료 | #5 | #35 |
 | [T04](T04-requirements-checklist.md) | 서류 목록·체크리스트 | | 완료 | #6 | #36 |
-| [T05](T05-evidence-upload.md) | 증빙 업로드 | | 대기 | #7 | |
+| [T05](T05-evidence-upload.md) | 증빙 업로드 | | 완료 | #7 | #37 |
 | [T06](T06-sample-cases.md) | 체험 계정(샘플 사건) | 6 | 대기 | #8 | |
 
 ### 2단계: 가짜 분석 — T07·T08은 11/22 오전, T09~T11은 11/22 오후

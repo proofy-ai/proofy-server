@@ -11,6 +11,7 @@ from app.schemas.case import CaseCreate, CaseOut, CasePatch, InflowIn, InflowOut
 from app.services.auth import issue_token
 from app.services.clock import utc_now
 from app.services.deadline import compute_deadline
+from app.services.evidence import count_evidence
 
 CASE_TTL = timedelta(hours=24)
 FUTURE_DATE = "미래 날짜는 입력할 수 없습니다."
@@ -116,7 +117,7 @@ def delete_case(db: Session, case: Case) -> None:
     db.commit()
 
 
-def to_case_out(case: Case, today: date) -> CaseOut:
+def to_case_out(db: Session, case: Case, today: date) -> CaseOut:
     return CaseOut(
         case_id=case.id,
         status=case.status,
@@ -133,8 +134,8 @@ def to_case_out(case: Case, today: date) -> CaseOut:
         narrative=case.narrative,
         input_version=case.input_version,
         deadline=compute_deadline(case.public_notice_date, today),
-        # 증빙(T05)·분석 실행(T07)·결과(T08)가 생기면 조회로 채운다
-        evidence_count=0,
+        evidence_count=count_evidence(db, case.id),
+        # 분석 실행(T07)·결과(T08)가 생기면 조회로 채운다
         latest_run=None,
         has_result=False,
         created_at=case.created_at,
