@@ -10,6 +10,8 @@ KST = timezone(timedelta(hours=9))
 
 URGENT_DAYS = 7
 NOTICE = "정확한 기한은 계좌가 있는 은행에 꼭 확인하세요."
+# 공고일을 모를 때의 기한 설명(계약 4.4, v0.6.4). FE가 항상 문장으로 표시한다
+UNKNOWN_BASIS = "공고일을 몰라 기한을 계산하지 못했습니다."
 
 
 def today_kst() -> date:
@@ -56,7 +58,7 @@ def compute_deadline(public_notice_date: date | None, today: date) -> Deadline:
             deadline_date=None,
             days_left=None,
             label="공고일 확인 필요",
-            basis=None,
+            basis=UNKNOWN_BASIS,
             notice=NOTICE,
         )
 

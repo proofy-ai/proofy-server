@@ -14,7 +14,10 @@ def assert_error_shape(body: dict, code: str) -> None:
 def test_health_shape(client):
     res = client.get("/api/v1/health")
     assert res.status_code == 200
-    assert res.json() == {"status": "ok", "agent": "scripted", "demoMode": True}
+    body = res.json()
+    assert set(body) == {"status", "agent", "demoMode", "dailyUsage"}
+    assert (body["status"], body["agent"], body["demoMode"]) == ("ok", "scripted", True)
+    assert set(body["dailyUsage"]) == {"date", "used", "limit"}
 
 
 # T01-2
