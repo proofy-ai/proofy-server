@@ -15,7 +15,7 @@ def test_unknown_notice_date():
     assert d.state == "UNKNOWN_NOTICE_DATE"
     assert d.deadline_date is None
     assert d.days_left is None
-    assert d.basis is None
+    assert d.basis == "공고일을 몰라 기한을 계산하지 못했습니다."
     assert d.label == "공고일 확인 필요"
     assert "은행" in d.notice
 

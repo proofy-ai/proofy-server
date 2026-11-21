@@ -13,5 +13,5 @@ class Deadline(CamelModel):
     deadline_date: date | None
     days_left: int | None
     label: str
-    basis: str | None
+    basis: str
     notice: str
