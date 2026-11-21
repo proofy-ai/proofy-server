@@ -14,7 +14,7 @@ Proofy 서버: 지급정지된 계좌 명의인(청년)이 은행에 낼 이의�
 - `docs/erd-review.md`: ERD 초안을 검토하며 내린 결정의 이유
 
 ## 실행 명령
-- 설치 `uv sync` · 서버 `uv run python -m uvicorn app.main:app --reload` · 테스트 `uv run python -m pytest` · 린트 `uv run ruff check .`
+- 설치 `uv sync` · 서버 `uv run python -m uvicorn app.main:app --reload --port 8080`(FE `.env.example`의 `VITE_API_ORIGIN`과 같은 포트) · 테스트 `uv run python -m pytest` · 린트 `uv run ruff check .`
 - `uv run pytest`·`uv run uvicorn` 대신 `python -m` 형태를 쓴다. 이 PC는 애플리케이션 제어 정책이 가상환경 실행 파일과 SQLAlchemy 컴파일 확장을 막는다(대처법은 README "Windows에서 실행이 막힐 때")
 
 ## 코드 구조
