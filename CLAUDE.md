@@ -12,6 +12,29 @@ Proofy 서버: 지급정지된 계좌 명의인(청년)이 은행에 낼 이의�
 - `docs/agent-design.md`: AI 에이전트 구조와 판단 근거
 - `docs/erd-review.md`: 데이터 모델 결정
 
+## 실행 명령
+- 설치 `uv sync` · 서버 `uv run python -m uvicorn app.main:app --reload` · 테스트 `uv run python -m pytest` · 린트 `uv run ruff check .`
+- `uv run pytest`·`uv run uvicorn` 대신 `python -m` 형태를 쓴다. 이 PC는 애플리케이션 제어 정책이 가상환경 실행 파일과 SQLAlchemy 컴파일 확장을 막는다(대처법은 README "Windows에서 실행이 막힐 때")
+
+## 코드 구조
+```text
+app/
+  main.py config.py db.py errors.py   앱 생성, 설정, DB, 공통 오류 응답
+  api/        HTTP 라우터만 (업무 로직 없음)
+  schemas/    요청·응답 모양. 계약과 1:1, CamelModel 상속(camelCase)
+  models/     DB 테이블
+  services/   코드가 만드는 것: 토큰, D-day, 서류 목록, 체크리스트, 증빙 저장, 샘플 사건, 한도, 자동 삭제, 상담 안내 검사
+  agent/      AI 분석: runner(실행·단계) scripted(가짜) extract/(글자 추출) masking transactions compare drafting verify llm
+  samples/    체험 계정 시나리오 데이터·서류
+tests/
+```
+- 호출 방향은 `api → services → models` 한쪽뿐이다. 라우터에 업무 로직을 넣지 않는다
+- AI 분석은 `agent/runner.py` 한 곳으로만 들어간다
+- **외부 AI 호출은 `agent/llm.py` 한 곳에서만 한다.** 마스킹을 거친 글자만 받게 만든다(원칙 4)
+- 숫자·날짜·충족 여부는 `services/`가 만들고 `agent/`는 계산하지 않는다(원칙 2)
+- 오류는 `app.errors.ApiError(status, code, message, details)`로 던진다. `code`는 계약 1.1 표의 값만 쓴다
+- DB 테이블은 시작할 때 만든다(마이그레이션 도구 없음). 새 모델은 `app/models/__init__.py`에서 import 한다
+
 ## 지켜야 할 원칙
 1. **AI는 판정하지 않는다.** 해제·수용 가능성, 판정 갈래 같은 필드를 출력 스키마에 두지 않는다. 판정처럼 읽히는 문장은 "확인 필요"로 표시한다
 2. **숫자·날짜·기한은 코드가 만든다.** D-day, 금액, 체크리스트 충족 여부를 LLM에 계산시키지 않는다
