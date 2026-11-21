@@ -71,7 +71,7 @@
 | 이름 | 값 | 화면 표시 |
 |---|---|---|
 | `InflowType` | `SALARY` 급여 · `GOODS` 물품 거래 대금 · `UNEXPECTED` 모르는 입금(통장 묶기) · `OTHER` | P0 화면은 앞의 셋을 선택지로 노출 |
-| `DocType` | `NOTICE` 지급정지 통지서 · `TRANSACTION_RECORD` 거래내역서(입금내역) · `INSURANCE_ELIGIBILITY` 건강보험자격득실확인서 · `EMPLOYMENT_CERT` 재직증명서 · `PAYSLIP` 급여명세서 · `BUSINESS_REG` 사업자등록증명 · `CHAT` 대화내역(문자·메신저, 협박 메시지 포함) · `CONTRACT` 계약서 · `TAX_INVOICE` 세금계산서 · `TRANSACTION_STATEMENT` 거래명세서 · `SHIPPING` 배송 기록 · `INCIDENT_REPORT` 피해 신고 기록(사건사고사실확인원·신고 접수증 등) · `OTHER` 기타 | **신분증 값은 없다.** 신분증은 받지 않는다 |
+| `DocType` | `NOTICE` 지급정지 통지서 · `TRANSACTION_RECORD` 거래내역서(입금내역) · `INSURANCE_ELIGIBILITY` 건강보험자격득실확인서 · `EMPLOYMENT_CERT` 재직증명서 · `PAYSLIP` 급여명세서 · `BUSINESS_REG` 사업자등록증명 · `CHAT` 대화내역(문자·메신저, 협박 메시지 포함) · `CONTRACT` 계약서 · `TAX_INVOICE` 세금계산서 · `TRANSACTION_STATEMENT` 거래명세서 · `SHIPPING` 배송 기록 · `OTHER` 기타 | **신분증 값은 없다.** 신분증은 받지 않는다 |
 | `CaseStatus` | `DRAFT` 입력 중 · `ANALYZING` 분석 중 · `REVIEW_READY` 결과 있음 · `ERROR` 마지막 분석 실패 | 홈 카드 "현재 단계" |
 | `ExtractStatus` | `UPLOADED` · `PROCESSING` · `READY` · `FAILED` | `FAILED`는 "직접 확인" |
 | `RunStatus` | `RUNNING` · `SUCCEEDED` · `FAILED` | |
@@ -186,10 +186,11 @@
 |---|---|---|---|---|---|
 | `THREAT_MESSAGE` | 해제 대가를 요구하는 협박 문자·메시지 | `TYPE_GUIDE` | `CHAT` | `false` | 금융위원회 보도참고 2024.2.1 "통장협박 … 객관적인 자료(예: 협박문자 등)" `https://www.fsc.go.kr/no010101/81640` |
 | `UNKNOWN_DEPOSIT_RECORD` | 모르는 입금이 보이는 거래내역서 | `ANALYSIS_INPUT` | `TRANSACTION_RECORD` | **`true`** | `null` |
-| `INCIDENT_REPORT` | 경찰·은행에 신고한 기록(사건사고사실확인원, 신고 접수증 등) | `OPTIONAL` | `INCIDENT_REPORT` | `false` | 법률사무소 안내 글(공식 자료 아님) `https://www.yglaw.co.kr/bbs/board.php?bo_table=lawinfo&wr_id=27` |
+| `INCIDENT_REPORT` | 경찰·은행에 신고한 기록(사건사고사실확인원, 신고 접수증 등) | `OPTIONAL` | `OTHER` | `false` | 법률사무소 안내 글(공식 자료 아님) `https://www.yglaw.co.kr/bbs/board.php?bo_table=lawinfo&wr_id=27` |
 
 - `THREAT_MESSAGE.note`: "협박 문자가 없으면 이의제기가 받아들여지기 어렵다는 보도가 있습니다. 받은 메시지는 지우지 말고 캡처해 두세요." (머니투데이 2025.12.1)
 - `INCIDENT_REPORT.note`: "내가 피해를 입었다는 것을 보여 주는 기록입니다. 신고했다면 접수증이나 사건사고사실확인원을 받아 두세요." 공식 근거를 찾으면 `TYPE_GUIDE`로 올린다.
+- 이 항목의 서류는 v0.4 FE와 맞추려고 새 `DocType`을 만들지 않고 `OTHER`로 받는다. 그래서 이 사건에 `OTHER` 서류가 하나라도 있으면 충족(`SATISFIED`)으로 계산한다.
 - 이 유형은 공식 서류 목록을 확인하지 못했다. 그래서 위 세 항목 외에는 AI가 사연을 보고 `AI_RECOMMENDED` 항목(예: 은행 상담 기록, 입금자에게 반환을 제안한 기록)을 더한다.
 
 - `acceptedDocTypes`가 여러 개면 **그중 하나만 있어도 충족**이다. 업로드 화면에서 항목을 누르면 `acceptedDocTypes`의 첫 값을 기본 `docType`으로 쓰고, 여러 개면 고르게 한다.
@@ -668,4 +669,4 @@ FE는 1.5초마다 부르고 `status`가 `RUNNING`이 아니면 멈춘다. 180�
 | 2026-11-21 | 0.2 | ① 사건은 화면 2 "다음"에서 생성 확정(사연은 화면 3에서 `PATCH`) ② `COMPARING` 문구를 "거래내역과 대조 중"으로, FE는 `stages[].label`만 표시 ③ 요구 서류에 `requiredForAnalysis` 추가, 거래내역서를 분석 시작 조건으로(`422`의 `details.missing`) |
 | 2026-11-21 | 0.3 | 외부 검토 반영. ① 초안: `CONFLICT` 연결 문장 자동 확인 필요, 진술 값 일치 시 서버가 연결, `warnings`, 문장별 `confirmed`·`unconfirmedCount`, 복사·PDF 전 확인창 ② 개인정보 보장 항목·`demoMode`·합성 데이터 안내 ③ `POST /cases/sample`, `GET /samples` 샘플 체험 ④ 일정에 리허설·소개서·제출(업로드+이메일) ⑤ `ANALYSIS_INPUT` 분류 신설, 물품 거래는 사업자 판매 대금 전제·예시를 청년 1인 판매 사업자로 ⑥ IP당 사건 생성 제한, `DAILY_LIMIT` ⑦ 미래 날짜 400 ⑧ 분석 시작에 `narrative` 동봉 ⑨ CORS 허용 헤더 |
 | 2026-11-21 | 0.4 | 체험 계정·마이페이지. ① L 체험 계정 선택(test01 `GOODS`, test02 `UNEXPECTED`), M 내 사건 화면 추가, 서버 인증은 그대로 ② localStorage `proofy.case` 한 건 → `proofy.cases` 배열 ③ `UNEXPECTED` 화면 노출, 유형별 항목(`THREAT_MESSAGE`, `UNKNOWN_DEPOSIT_RECORD`), 샘플 시나리오 추가, `SALARY` 샘플은 P1 ④ `case.sampleScenario` 추가 ⑤ 샘플 사건은 AI 실패·하루 한도 초과 때 미리 만든 결과로 끝남(`result.precomputed`, step `FALLBACK`) ⑥ 상담 안내 검사: 통장 대여·송금 대행 표현이 사연에 있으면 초안 대신 `result.referral`(step `SAFETY`) |
-| 2026-11-21 | 0.5 | AI 에이전트 계획 반영(`docs/agent-design.md`). ① 초안 문장에 `section`(`DraftSection`: 입금 경위·가담하지 않았다는 설명·피해 경위), `fullText`는 묶음 사이 빈 줄 ② `DocType`에 `INCIDENT_REPORT`, `UNEXPECTED`에 피해 신고 기록 항목(`OPTIONAL`) ③ `TOOL_CALL` step `summary`에 AI가 밝힌 조회 이유, `VERIFY` step 설명 |
+| 2026-11-21 | 0.5 | AI 에이전트 계획 반영(`docs/agent-design.md`). ① 초안 문장에 `section`(`DraftSection`: 입금 경위·가담하지 않았다는 설명·피해 경위), `fullText`는 묶음 사이 빈 줄 ② `UNEXPECTED`에 피해 신고 기록 항목 `INCIDENT_REPORT`(`OPTIONAL`, 서류 종류는 기존 `OTHER`). **모두 필드·항목 추가라 v0.4 FE가 그대로 동작한다** ③ `TOOL_CALL` step `summary`에 AI가 밝힌 조회 이유, `VERIFY` step 설명 |

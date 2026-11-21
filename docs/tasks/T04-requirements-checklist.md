@@ -8,7 +8,7 @@
 - `GET /meta/requirements?inflowType=`
 - `checklist_items` 테이블, `GET /cases/{id}/checklist`, `PATCH …/checklist/{itemId}`(계약 4.8)
 - 충족 여부(`status`)는 올린 서류의 `docType`으로 코드가 계산
-- 통장 묶기(`UNEXPECTED`)에 피해 신고 기록 항목 `INCIDENT_REPORT`(`OPTIONAL`, 계약 v0.5 4.2)
+- 통장 묶기(`UNEXPECTED`)에 피해 신고 기록 항목 `INCIDENT_REPORT`(`OPTIONAL`, `acceptedDocTypes: ["OTHER"]`, 계약 v0.5 4.2)
 
 ## 제외
 
