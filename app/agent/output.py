@@ -8,6 +8,8 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Literal
 
+from app.agent.extract import Extraction
+
 FindingStatus = Literal["MATCH", "CONFLICT", "STATEMENT_ONLY", "UNKNOWN"]
 ConflictField = Literal["AMOUNT", "DATE", "COUNTERPARTY", "OTHER"]
 SourceKind = Literal["NARRATIVE", "EVIDENCE", "TRANSACTION"]
@@ -89,3 +91,5 @@ class AnalysisOutput:
     findings: list[Finding] = field(default_factory=list)
     recommended: list[RecommendedDoc] = field(default_factory=list)
     draft_sentences: list[DraftSentence] = field(default_factory=list)
+    # 서류별로 읽은 글자(evidenceId → 추출 결과). ① 단계가 채우고, 저장은 그때 이미 끝났다
+    extractions: dict[str, Extraction] = field(default_factory=dict)

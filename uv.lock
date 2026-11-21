@@ -253,8 +253,10 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "fastapi" },
+    { name = "pillow" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
+    { name = "pypdf" },
     { name = "python-multipart" },
     { name = "sqlalchemy" },
     { name = "uvicorn", extra = ["standard"] },
@@ -263,8 +265,6 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "httpx" },
-    { name = "pillow" },
-    { name = "pypdf" },
     { name = "pytest" },
     { name = "reportlab" },
     { name = "ruff" },
@@ -273,8 +273,10 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.165.0" },
+    { name = "pillow", specifier = ">=13" },
     { name = "pydantic", specifier = ">=2" },
     { name = "pydantic-settings", specifier = ">=2.16.3" },
+    { name = "pypdf", specifier = ">=7.1" },
     { name = "python-multipart", specifier = ">=0.0.34" },
     { name = "sqlalchemy", specifier = ">=2" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.54.0" },
@@ -283,8 +285,6 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "httpx", specifier = ">=0.28.1" },
-    { name = "pillow", specifier = ">=13.0.0" },
-    { name = "pypdf", specifier = ">=7.1.1" },
     { name = "pytest", specifier = ">=9.2.0" },
     { name = "reportlab", specifier = ">=5.1.0" },
     { name = "ruff", specifier = ">=0.17.6" },
