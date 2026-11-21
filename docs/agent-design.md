@@ -1,0 +1,114 @@
+# Proofy AI Agent 설계 판단
+
+- 작성일: 2026-11-21 · 마감 2026-11-23(월) 17:00
+- 입력 자료: `docs/screen-flow.md`, `etc/proofy_erd_v0.1.md`, 해커톤 안내문·AI 활용 기준(첨부1~3), `corebank-objection-agent-main`, `DonWorry-dev/ai-server`
+- 결론 요약: **두 레포 중 어느 것도 그대로 옮기지 않는다.** corebank 워커의 파이프라인 뼈대(OCR → 도구 루프 → 구조화 출력 → 기계적 후검증 → 단계 기록)와 DonWorry의 "문장마다 근거 번호 강제 + 코드 검사" 패턴을 가져와, proofy-server 안에 **신청인 쪽 에이전트**를 새로 짠다.
+
+## 1. 두 레포에서 확인한 것
+
+| | corebank-objection-agent | DonWorry ai-server |
+|---|---|---|
+| 사용자 | 은행 심사 담당자(기관 측) | 가맹점 보안 직원(기관 측) |
+| AI가 내는 것 | **판정안**(`NORMAL_ACCEPT`/`UNDETERMINED`/`FRAUD_PATTERN` 등 갈래) + 주장·모순·안내문 | 조사 보고서 요약 문장(사실 번호 첨부) + 추가 확인 사항 |
+| 구조 | 서버 대기열 `claim` → 작업 토큰·점유 연장 → 워커가 단계 이벤트를 서버에 기록 | FastAPI + LangGraph(base → choose → run_tools → write → assemble) |
+| LLM | Claude(`claude-opus-5-5`, effort low), Messages API 수동 도구 루프, JSON 스키마 구조화 출력, 서버 fallback | Ollama(Qwen)/OpenAI, LangChain |
+| 도구 | `get_ledger`, `get_external_checks` | 결제 목록, FDS 근거, 이력, 연결 결제 등 Spring 조회 API |
+| OCR | 로컬 Tesseract + 전처리(방향·기울기·조명·해상도). **원본 이미지는 LLM에 안 보냄**, 서버가 가명 처리한 글자만 분석 | 없음 |
+| 환각 방어 | 조회한 거래번호만 근거로 남김, 인용문을 원문에서 부분 문자열로 검증(`quoteVerified`), 서류·영역 번호 검증, 출력 길이 상한 | 사실 번호를 enum으로 고정한 스키마, 문장 속 숫자가 사실에 있는지 검사, 실패 시 오류 사유 붙여 다시 쓰기, 숫자·ID는 AI가 아닌 코드가 채움 |
+| 성과 기록 | 200건 평가 정확도 99.5%, **건당 $0.04, 17초**(중앙값) | 질문·요약 품질 측정 스크립트 |
+| 쓸 수 없는 부분 | 프롬프트·평가 시나리오가 git-crypt로 암호화돼 읽을 수 없음 | — |
+
+## 2. 그대로 옮기지 않는 이유
+
+1. **역할이 반대다.** 둘 다 기관이 사건을 판정하는 도구다. corebank의 출력 스키마 핵심이 `branch`(판정 갈래)이고 정책 보정(`policy.py`)도 판정 갈래를 고치는 규칙이다. Proofy는 "AI는 판정하지 않고 서류 준비만 돕는다"가 서비스 원칙이라 이 축을 통째로 빼야 한다. 빼고 나면 남는 것은 파이프라인 뼈대다.
+2. **대회 규정.** 안내문 3-(2)와 AI 활용 기준 제6조: 기존 개발물은 범위를 별첨에 적으면 쓸 수 있지만, 타 공모전·대회 출품·수상작과 "동일하거나 실질적으로 유사한" 결과물은 수정·고도화해도 제출 불가다. 고유 기획·핵심 기능이 아닌 **범용 코드·라이브러리만** 출처를 밝히고 재사용할 수 있다. corebank는 같은 지급정지 이의제기 도메인이라 핵심 기능을 옮기면 유사성 시비가 생긴다. → **확인 필요: corebank·DonWorry가 다른 공모전·대회에 출품된 적이 있는지.** 있다면 아래 "재사용 후보"도 범용 유틸(OCR 전처리, API 재시도)로만 한정하고 별첨에 적는다.
+3. **인프라가 과하다.** corebank는 Spring 서버의 대기열·작업 토큰·점유(lease)·순번 재전송 규약 위에서 돈다. 2일 안에 만드는 MVP에 필요 없다. DonWorry는 LangGraph·Ollama 의존성이 추가된다.
+
+## 3. 가져오는 것
+
+| 출처 | 가져오는 것 | 방식 |
+|---|---|---|
+| corebank `ocr.py`, `preprocess.py` | 사진 전처리 + Tesseract 줄 단위 영역(`page`, `index`, `bbox`, `confidence`) | 범용 유틸로 재사용, 별첨에 출처·범위 기재 |
+| corebank `llm/claude.py` | 마감 안 재시도, 시스템 프롬프트 캐시, `refusal`/`max_tokens` 처리, 비용 계산 | 패턴 참고해 새로 작성 |
+| corebank `worker.py` 후처리 | 조회한 거래 ID만 근거 인정, 인용문 원문 대조, 출처 번호 검증, 길이 상한 | 패턴 참고해 새로 작성 |
+| corebank 단계 이벤트 | `OCR`, `TOOL_CALL`, `CLAIM`, `CONFLICT` … 단계 기록 | 4번 "분석 중" 화면의 진행 표시로 사용 |
+| DonWorry `narrative.py` | 근거 번호를 enum으로 고정한 스키마, 문장 속 숫자 검사, 실패 사유를 붙여 다시 쓰기 | 소명서 초안 문장 검증에 사용 |
+| DonWorry `assemble.py` 원칙 | "숫자·ID·날짜는 AI가 아니라 코드가 채운다" | D-day, 금액, 체크리스트는 전부 코드 |
+
+## 4. Proofy 에이전트 구조
+
+```text
+POST /analysis-runs (202)
+  │
+  ├─ ① EXTRACTING  "글자 읽는 중"          [코드]
+  │     증빙마다 로컬 OCR → 줄 단위 영역 저장 → 개인정보 마스킹(주민번호·계좌·전화)
+  │     못 읽은 서류는 실패로 두고 "직접 확인" 항목으로 넘김
+  │     거래내역서(TRANSACTION_RECORD)는 [AI 1회 호출]로 거래 행 추출 → 금액·일자 문자열이
+  │     OCR 영역에 실제로 있는 행만 transactions 테이블에 저장
+  │
+  ├─ ② COMPARING   "거래내역과 대조 중"     [AI 도구 루프]
+  │     입력: 사연(narrative), 사용자 진술 입금(유형·금액·일시), 서류별 OCR 영역(마스킹본)
+  │     도구: get_transactions(from, to, counterparty, minAmount, maxAmount)
+  │           get_evidence_regions(evidenceId)            ← 긴 서류는 필요할 때만 읽게
+  │     출력(구조화): findings[] = 주장, 상태(MATCH/CONFLICT/STATEMENT_ONLY/UNKNOWN),
+  │                   근거[](evidenceId+regionIndex+인용 / transactionId / NARRATIVE), 어긋남 설명
+  │                   recommendedDocs[] (AI 권장 자료, 공식 필수와 구분)
+  │
+  ├─ ③ DRAFTING    "초안 작성 중"           [AI 1회 호출]
+  │     입력: 검증을 통과한 findings만, 번호로
+  │     출력(구조화): sentences[] = { text, findingIds[] (enum 고정) }
+  │
+  └─ ④ VERIFY      (화면엔 ③에 포함)        [코드]
+        - 인용문이 해당 서류 영역에 실제로 있는지(공백 무시 부분 문자열) → verified
+        - transactionId가 이번 실행의 도구가 실제로 반환한 ID인지
+        - 근거가 같은 사건 소속인지
+        - 초안 문장 속 금액·날짜가 인용한 근거에 있는지
+        - 판정성 표현("해제될 것", "확실히", "승인") 검사
+        → 하나라도 걸리면 그 문장은 needsCheck=true + 사유. 지우지 않고 "확인 필요"로 표시
+        - 체크리스트(탭 B): 유형별 공식 목록(코드 상수) × 올린 서류 docType으로 충족 여부 계산
+```
+
+### 왜 이 형태인가
+
+- **판정 없음을 스키마로 보장.** 출력 스키마에 판정·가능성 필드가 아예 없다. 프롬프트로만 막지 않는다.
+- **에이전트다운 부분은 ②에 집중.** 어떤 거래를 어떤 범위로 조회할지, 어느 서류를 더 읽을지는 모델이 고른다. 나머지(OCR, 기한, 체크리스트, 검증)는 코드가 해서 시연이 흔들리지 않는다. 심사 기준 "AI가 핵심 기능에 실질적으로 기여"와 "오류·불확실성 대응"(합 15점)을 둘 다 설명할 수 있다.
+- **원본 이미지는 외부 AI로 안 간다.** 로컬 OCR + 마스킹 후 글자만 보낸다. AI 활용 기준 제7조(외부 AI에 실제 개인정보 전송 금지)에 대한 설계상 답이 된다. 시연은 합성 서류만 쓴다.
+- **"원장"은 사용자가 낸 거래내역서다.** 신청인은 은행 원장을 볼 수 없다. ERD의 `demo_transactions`(은행 원장 흉내)는 corebank 시각이 남은 것이라, P0는 사용자가 올린 거래내역서에서 뽑은 행을 대조 대상으로 쓴다. 오픈뱅킹·마이데이터 연동은 확장 항목(`transactions.source`)으로 둔다. 자세한 내용은 `docs/erd-review.md`.
+- **독립된 원문이 있어야 인용 검증이 된다.** Claude 비전으로 바로 읽히면 "AI가 읽은 글"과 "AI가 인용한 글"을 같은 AI가 만들어 검증이 순환한다. 로컬 OCR 결과가 검증 기준이 된다.
+
+## 5. 모델·API 선택
+
+| 항목 | 결정 | 이유 |
+|---|---|---|
+| 표면 | Claude **Messages API**(`anthropic` Python SDK) + 직접 짠 도구 루프 | 단계가 코드로 정해진 워크플로이고 한 실행이 1분 안쪽이다. 루프를 서버 안에서 돌려야 단계 기록·후검증을 끼울 수 있다. corebank에서 같은 방식이 검증됐다. Managed Agents는 쓰지 않는다 |
+| 모델 | `claude-opus-5-5` | corebank 측정: effort low에서 건당 $0.04, 17초. Proofy는 호출 2~3회라 건당 $0.1 안팎, 30~60초 예상(실측 필요) |
+| effort | `low`로 시작 → 시연 케이스로 측정 후 조정 | Opus 5.5 기본값은 `medium`이라 명시한다 |
+| 출력 | `output_config.format` JSON 스키마 구조화 출력 | 프리필 불가, 강제 `tool_choice`(any/tool) 400 → 스키마로 형식 보장 |
+| 거절 대응 | `betas=["server-side-fallback-2026-07-01"]`, `fallbacks="default"` | 금융·사기 관련 문맥이라 안전 분류기 거절 가능성 대비 |
+| 캐시 | 시스템 프롬프트·도구 정의에 `cache_control` | 반복 시연 비용 절감 |
+| 오프라인 모드 | `AGENT_LLM=scripted`(규칙 기반 가짜 분석기) | API 키 없이 FE 연동·CI·시연 리허설. corebank와 같은 아이디어 |
+
+## 6. 서버 스택 제안
+
+- Python 3.12, FastAPI, SQLAlchemy, Pydantic v2
+- DB: 로컬 SQLite, 배포는 Postgres(무료 배포 환경의 디스크는 재시작 때 지워질 수 있음)
+- 분석 실행: FastAPI 백그라운드 작업(프로세스 내 스레드). 대기열 없음. 사건당 동시 실행 1개
+- OCR: Docker 이미지에 `tesseract-ocr tesseract-ocr-kor poppler-utils`. 배포 환경에서 설치가 막히면 `EXTRACTOR=claude_vision`으로 바꿀 수 있게 추출기를 인터페이스로 둔다(합성 서류 한정)
+- 파일 저장: 로컬 볼륨(사건 삭제 시 함께 삭제, 생성 후 24시간 자동 삭제)
+
+## 7. 한계와 대응 (소개서 "AI 결과의 한계" 항목에 그대로 쓸 것)
+
+| 한계 | 대응 |
+|---|---|
+| OCR 오인식(사진 각도, 조명, 손글씨) | 전처리, 신뢰도 낮은 영역 수 표시, 못 읽은 서류는 숨기지 않고 "직접 확인" |
+| 모델이 없는 사실을 씀 | 인용문 원문 대조, 조회 안 한 거래 ID 제거, 문장 속 숫자 대조 → 실패 문장은 "확인 필요" |
+| 판정처럼 읽히는 문장 | 스키마에 판정 필드 없음 + 판정성 표현 검사 + 화면 고지 |
+| 기한 오산 | AI가 계산하지 않음. 공고일 없으면 "공고일 확인 필요", 있어도 "참고 계산, 은행 확인" 표기 |
+| 서류 기준이 기사 2건뿐 | 공식(법령) 항목과 유형별 안내(기사 근거), AI 권장을 체크리스트에서 구분해 표시 |
+| 개인정보 | 신분증 미수집, 원본 이미지 외부 전송 없음, 마스킹, 신청인 인적사항은 서버에 저장하지 않음(FE에서 인쇄 시에만 입력), 24시간 자동 삭제 |
+
+## 8. 남은 결정 (사용자 확인 필요)
+
+1. corebank·DonWorry의 타 대회 출품 이력 → 재사용 범위 결정
+2. 배포 환경(Render/Railway/Fly/자체 VM) → OCR 설치 가능 여부
+3. ~~거래내역서를 시연 필수 증빙으로 둘지~~ → **결정(11/21): 두 유형 모두 분석 시작 조건.** 시연용 합성 거래내역서 2종(급여, 물품 거래)을 미리 만든다
