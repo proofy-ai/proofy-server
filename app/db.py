@@ -1,9 +1,10 @@
 """DB 연결. 엔진과 세션 팩토리는 앱마다 만들어 `app.state`에 둔다(테스트는 임시 DB를 쓴다)."""
 
 from collections.abc import Iterator
+from typing import Annotated
 
-from fastapi import Request
-from sqlalchemy import Engine, create_engine
+from fastapi import Depends, Request
+from sqlalchemy import Engine, create_engine, event
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 
@@ -12,8 +13,16 @@ class Base(DeclarativeBase):
 
 
 def make_engine(database_url: str) -> Engine:
-    connect_args = {"check_same_thread": False} if database_url.startswith("sqlite") else {}
-    return create_engine(database_url, connect_args=connect_args)
+    is_sqlite = database_url.startswith("sqlite")
+    connect_args = {"check_same_thread": False} if is_sqlite else {}
+    engine = create_engine(database_url, connect_args=connect_args)
+    if is_sqlite:
+        # SQLite는 FK(ON DELETE CASCADE)를 연결마다 켜야 동작한다
+        @event.listens_for(engine, "connect")
+        def _enable_foreign_keys(dbapi_conn, _record) -> None:
+            dbapi_conn.execute("PRAGMA foreign_keys=ON")
+
+    return engine
 
 
 def make_session_factory(engine: Engine) -> sessionmaker[Session]:
@@ -33,3 +42,7 @@ def get_db(request: Request) -> Iterator[Session]:
         yield session
     finally:
         session.close()
+
+
+# 라우터·의존성 인자 타입. 같은 요청 안에서는 같은 세션을 쓴다
+DbSession = Annotated[Session, Depends(get_db)]

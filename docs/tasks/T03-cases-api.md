@@ -1,6 +1,6 @@
 # T03 사건 API
 
-- 단계: 1단계 사건·증빙 · 예정: 11/21 밤 · 상태: 계획 확인 · 이슈: #5 · PR: 없음
+- 단계: 1단계 사건·증빙 · 예정: 11/21 밤 · 상태: 완료 · 이슈: #5 · PR: (이 PR)
 
 ## 범위
 
@@ -74,5 +74,16 @@
 
 ## 결정
 
+- 11/21 사용자 승인: 계획과 추가 테스트 T03-a~c
+- 11/21 PATCH에서 `noticeReceivedDate`·`inflow`를 `null`로 보내면 400(`details.fields`에 그 필드). 사건에 꼭 있어야 하는 값이다
+- 11/21 금액·`hasPriorFreeze`는 엄격 타입(`StrictInt`·`StrictBool`). `"150000"` 같은 문자열 금액은 400(계약 1절 "문자열·소수 금지")
+- 11/21 시각은 UTC로 시간대 없이, 초 단위로 저장하고 `"…Z"`로 응답(`app/schemas/common.py` `UtcDatetime`)
+- 11/21 SQLite는 연결마다 `PRAGMA foreign_keys=ON`(ERD의 ON DELETE CASCADE가 실제로 동작하도록, `app/db.py`)
+- 11/21 라우터 인자는 `Annotated` 타입(`DbSession`, `AuthorizedCase`). ruff B008(`Depends`를 기본값으로 쓰지 않기)
+
 ## 결과
+
+- `uv run python -m pytest -q` → 29 passed(T03 13개: 계약 4·5·7, T03-a~c, 응답 키·입력 검증·PATCH 규칙·삭제)
+- `uv run ruff check .` → All checks passed, `uv run ruff format --check .` → 이상 없음
+- 미검증: 서버를 띄워 FE와 직접 연결해 보지는 않음(TestClient로만 확인). Postgres에서 실행 안 해 봄(T18)
 
