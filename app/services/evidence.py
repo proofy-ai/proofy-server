@@ -3,8 +3,9 @@
 import hashlib
 import ntpath
 import posixpath
+import threading
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import BinaryIO
 
 from sqlalchemy import func, select
@@ -39,9 +40,23 @@ def _clean_name(filename: str | None) -> str:
     return (name or "upload")[:MAX_NAME_LENGTH]
 
 
+_last_created_at = datetime.min
+_created_at_lock = threading.Lock()
+
+
 def _now() -> datetime:
-    # 올린 순서를 지키려고 마이크로초까지 저장한다(응답은 초 단위)
-    return datetime.now(UTC).replace(tzinfo=None)
+    """올린 순서를 지키는 시각(마이크로초까지 저장, 응답은 초 단위).
+
+    Windows 시계는 해상도가 거칠어 연달아 부르면 같은 값이 나올 수 있다. 같거나 이전 값이면
+    1마이크로초씩 밀어 항상 커지게 한다(서버 프로세스 하나 기준).
+    """
+    global _last_created_at
+    with _created_at_lock:
+        now = datetime.now(UTC).replace(tzinfo=None)
+        if now <= _last_created_at:
+            now = _last_created_at + timedelta(microseconds=1)
+        _last_created_at = now
+        return now
 
 
 def count_evidence(db: Session, case_id: str) -> int:
@@ -56,6 +71,34 @@ def list_evidence(db: Session, case_id: str) -> list[Evidence]:
             .order_by(Evidence.created_at, Evidence.id)
         )
     )
+
+
+def stage_evidence(
+    db: Session,
+    case_id: str,
+    doc_type: str,
+    original_name: str,
+    mime: str,
+    data: bytes,
+    *,
+    is_sample: bool = False,
+) -> Evidence:
+    """증빙 행과 파일 원본을 세션에 넣는다(커밋은 부르는 쪽이 한다). 검사는 부르는 쪽 책임."""
+    evidence = Evidence(
+        id=str(uuid.uuid4()),
+        case_id=case_id,
+        doc_type=doc_type,
+        original_name=original_name,
+        mime_type=mime,
+        size_bytes=len(data),
+        content_sha256=hashlib.sha256(data).hexdigest(),
+        is_sample=is_sample,
+        extract_status="UPLOADED",
+        created_at=_now(),
+    )
+    db.add(evidence)
+    db.add(EvidenceFile(evidence_id=evidence.id, content=data))
+    return evidence
 
 
 def add_evidence(
@@ -81,20 +124,7 @@ def add_evidence(
     if mime is None:
         raise ApiError(415, "UNSUPPORTED_FILE_TYPE", "JPG·PNG·PDF 파일만 올릴 수 있어요.")
 
-    evidence = Evidence(
-        id=str(uuid.uuid4()),
-        case_id=case.id,
-        doc_type=doc_type,
-        original_name=_clean_name(filename),
-        mime_type=mime,
-        size_bytes=len(data),
-        content_sha256=hashlib.sha256(data).hexdigest(),
-        is_sample=False,
-        extract_status="UPLOADED",
-        created_at=_now(),
-    )
-    db.add(evidence)
-    db.add(EvidenceFile(evidence_id=evidence.id, content=data))
+    evidence = stage_evidence(db, case.id, doc_type, _clean_name(filename), mime, data)
     _bump_input_version(case)
     db.commit()
     return evidence

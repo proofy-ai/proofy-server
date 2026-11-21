@@ -1,0 +1,5 @@
+# 바이너리 파일은 줄바꿈을 바꾸지 않는다(PDF 내부 위치 정보가 깨지지 않게)
+*.pdf binary
+*.png binary
+*.jpg binary
+*.jpeg binary

@@ -1,4 +1,4 @@
-# Proofy FE–BE API 계약 v0.6.2
+# Proofy FE–BE API 계약 v0.6.3
 
 - 작성일: 2026-11-21 · 상태: **BE 결정 반영, FE 확인 후 "합의됨"으로 바꾼다**
 - 화면 기준: `docs/screen-flow.md`(흐름 화면 6개 + 체험 계정 선택·내 사건) · 데이터 기준: `docs/erd.md` · AI 흐름: `docs/agent-design.md`
@@ -253,6 +253,10 @@
 | `GOODS` | test01 | 거래내역서(텍스트 PDF), 거래처와의 대화내역(PNG), 사업자등록증명(PNG) | 입금 일치, 대화 속 합의 금액과 입금액 **불일치**(탭 A `AMOUNT` 경고와 탭 C "확인 필요"), 거래명세서 없음(탭 B) |
 | `UNEXPECTED` | test02 | 모르는 사람의 입금 10만 원이 보이는 거래내역서(텍스트 PDF), "20만 원 보내면 신고 취하해 줄게" 협박 문자(PNG) | 입금 금액 일치, 입금 뒤 그 돈이 빠져나가지 않음(거래내역 조회), 사연의 입금 날짜와 거래내역 날짜 **불일치**(탭 A `DATE` 경고), "바로 은행에 알렸다"는 진술만 있음(탭 B AI 권장: 신고 내역) |
 | `SALARY` | 없음(P1, 시간이 남으면) | 급여 입금이 보이는 거래내역서(텍스트 PDF), 재직증명서(PNG) | 입금 금액·날짜 일치, 근무 사실 근거 |
+
+- **날짜:** 통지일·공고일만 오늘 기준 상대 날짜다(통지일 = 오늘 − 6일, 공고일 = 오늘 − 4일). 입금일과 사연·서류 속 날짜는 고정이다(`GOODS` 2026-11-08, `UNEXPECTED` 사연 2026-11-11). 서류가 고정 파일이라 입금일까지 바꾸면 사연·서류와 어긋나기 때문이다.
+- `SALARY`는 P1이라 준비되기 전까지 `400 VALIDATION_ERROR`(`details.fields.scenario`)를 준다.
+- 서류는 사건마다 복사본으로 들어간다(`isSample: true`). 지우기·분석·24시간 삭제는 일반 서류와 같다.
 
 #### `GET /samples` — 샘플 서류 내려받기
 
@@ -676,6 +680,7 @@ FE는 1.5초마다 부르고 `status`가 `RUNNING`이 아니면 멈춘다. 180�
 | 2026-11-21 | 0.2 | ① 사건은 화면 2 "다음"에서 생성 확정(사연은 화면 3에서 `PATCH`) ② `COMPARING` 문구를 "거래내역과 대조 중"으로, FE는 `stages[].label`만 표시 ③ 요구 서류에 `requiredForAnalysis` 추가, 거래내역서를 분석 시작 조건으로(`422`의 `details.missing`) |
 | 2026-11-21 | 0.3 | 외부 검토 반영. ① 초안: `CONFLICT` 연결 문장 자동 확인 필요, 진술 값 일치 시 서버가 연결, `warnings`, 문장별 `confirmed`·`unconfirmedCount`, 복사·PDF 전 확인창 ② 개인정보 보장 항목·`demoMode`·합성 데이터 안내 ③ `POST /cases/sample`, `GET /samples` 샘플 체험 ④ 일정에 리허설·소개서·제출(업로드+이메일) ⑤ `ANALYSIS_INPUT` 분류 신설, 물품 거래는 사업자 판매 대금 전제·예시를 청년 1인 판매 사업자로 ⑥ IP당 사건 생성 제한, `DAILY_LIMIT` ⑦ 미래 날짜 400 ⑧ 분석 시작에 `narrative` 동봉 ⑨ CORS 허용 헤더 |
 | 2026-11-21 | 0.4 | 체험 계정·마이페이지. ① L 체험 계정 선택(test01 `GOODS`, test02 `UNEXPECTED`), M 내 사건 화면 추가, 서버 인증은 그대로 ② localStorage `proofy.case` 한 건 → `proofy.cases` 배열 ③ `UNEXPECTED` 화면 노출, 유형별 항목(`THREAT_MESSAGE`, `UNKNOWN_DEPOSIT_RECORD`), 샘플 시나리오 추가, `SALARY` 샘플은 P1 ④ `case.sampleScenario` 추가 ⑤ 샘플 사건은 AI 실패·하루 한도 초과 때 미리 만든 결과로 끝남(`result.precomputed`, step `FALLBACK`) ⑥ 상담 안내 검사: 통장 대여·송금 대행 표현이 사연에 있으면 초안 대신 `result.referral`(step `SAFETY`) |
+| 2026-11-21 | 0.6.3 | 4.3.1 설명 보충: 샘플 사건 날짜 규칙(통지일·공고일만 상대, 입금일·사연·서류 날짜 고정), `SALARY` 샘플은 준비 전까지 400, 서류는 사건마다 복사본. 응답 모양 변경 없음 |
 | 2026-11-21 | 0.6.2 | ① 4.2에 `OTHER` 유형 목록과 "문구가 없는 항목의 `note`는 `null`" 규칙 ② 4.8 예시의 `TRADE_DOCUMENT.note`를 `null`로(사건별 문구는 AI 권장 항목·탭 A가 맡음). 서버 응답 모양 변경 없음 |
 | 2026-11-21 | 0.6.1 | FE 코드에 맞춤(서버 동작 변경 없음). ① 로컬 BE 주소 `http://localhost:8080` ② 6절에 FE 전용 화면 설정(`setting-storage`)과 헤더 "내 사건" 버튼 |
 | 2026-11-21 | 0.6 | FE 수정 요청 반영(`docs/erd.md` v1.1). ① 한도·비용을 사건과 분리한 사용량 기록으로 셈(사건 삭제로 줄지 않음), 한도 숫자는 서버 환경변수 ② `GET /health`에 `dailyUsage` 추가 ③ 인용 검증은 마스킹한 글(서류·사연) 기준, 사연도 마스킹해서 AI에 보냄 ④ `PATCH`와 분석 시작의 `narrative`는 값이 실제로 바뀔 때만 `inputVersion` +1 ⑤ 다시 분석해 상담 안내로 끝나면 이전 초안 삭제(`GET /draft` 404) ⑥ 결과·근거 거래·AI 권장 항목·초안은 가장 최근 성공 실행 것만 ⑦ CORS는 FE 고정 도메인만(미리보기 제외). **필드 추가와 동작 명시뿐이라 v0.4·v0.5 FE가 그대로 동작한다** |

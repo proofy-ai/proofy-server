@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import cases, checklist, evidence, health, meta
+from app.api import cases, checklist, evidence, health, meta, samples
 from app.config import Settings, get_settings
 from app.db import init_db, make_engine, make_session_factory
 from app.errors import register_error_handlers
@@ -41,6 +41,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     api = APIRouter(prefix="/api/v1")
     api.include_router(health.router)
     api.include_router(meta.router)
+    # /cases/sample을 /cases/{case_id}보다 먼저 붙인다
+    api.include_router(samples.router)
     api.include_router(cases.router)
     api.include_router(evidence.router)
     api.include_router(checklist.router)
