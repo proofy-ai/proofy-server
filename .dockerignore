@@ -1,0 +1,19 @@
+# 이미지에는 pyproject.toml, uv.lock, app/만 들어간다(Dockerfile COPY). 나머지는 빌드에 보내지도 않는다
+.git
+.github
+.claude
+.venv
+.env
+.env.*
+etc
+proofy-fe-main
+docs
+scripts
+tests
+**/__pycache__
+*.pyc
+*.sqlite3
+*.db
+.pytest_cache
+.ruff_cache
+uploads

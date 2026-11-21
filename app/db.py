@@ -12,10 +12,20 @@ class Base(DeclarativeBase):
     pass
 
 
+def normalize_database_url(database_url: str) -> str:
+    """호스팅(Neon 등)이 주는 `postgres://`·`postgresql://` 주소를 psycopg 3 드라이버로 바꾼다."""
+    for prefix in ("postgres://", "postgresql://"):
+        if database_url.startswith(prefix):
+            return "postgresql+psycopg://" + database_url[len(prefix) :]
+    return database_url
+
+
 def make_engine(database_url: str) -> Engine:
+    database_url = normalize_database_url(database_url)
     is_sqlite = database_url.startswith("sqlite")
     connect_args = {"check_same_thread": False} if is_sqlite else {}
-    engine = create_engine(database_url, connect_args=connect_args)
+    # Neon은 한동안 안 쓰면 연결을 끊는다. 꺼내 쓰기 전에 살아 있는지 확인한다
+    engine = create_engine(database_url, connect_args=connect_args, pool_pre_ping=not is_sqlite)
     if is_sqlite:
         # SQLite는 FK(ON DELETE CASCADE)를 연결마다 켜야 동작한다
         @event.listens_for(engine, "connect")

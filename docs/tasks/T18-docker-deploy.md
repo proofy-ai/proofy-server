@@ -59,3 +59,8 @@
 
 ## 결과
 
+- 코드(PR 1): `Dockerfile`(python 3.12-slim + tesseract-ocr-kor + poppler, `uv sync --locked --no-dev`, 비루트 사용자, `PORT`·프록시 헤더), `.dockerignore`, `psycopg[binary]`, `app/db.py` 주소 바꾸기·`pool_pre_ping`, `docs/deploy.md` 안내서, 단위 테스트 `tests/test_t18_deploy.py`
+- **로컬 리허설(11/22, Docker `postgres:17` + 이미지, `PORT=10000`):** 점검 스크립트(스크래치) 20개 항목 모두 통과 — health, CORS 사전 요청, 샘플 5개 내려받기(attachment), 두 시나리오 샘플 사건·분석·결과·초안 저장, 직접 만든 사건에 서류 올리기, 삭제. `AGENT_LLM=claude`로 실제 추출: GOODS 7.0초(PDF 12줄, 대화 18줄, 사업자 15줄), UNEXPECTED 3.2초, Postgres `regions_json`에 한글 정상(대화 12번 줄 "3개 12만원에 할게요"). 메모리 약 103MB(무료 512MB 안)
+- `uv run python -m pytest -q` 114 passed·2 skipped, ruff 통과
+- 남은 것: Render·Neon 연결(사용자), 공개 주소 점검과 무료 서버 OCR 시간 측정, FE 주소 CORS
+
