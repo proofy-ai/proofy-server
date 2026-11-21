@@ -88,9 +88,12 @@
 
 ## 결과
 
-- `uv run python -m pytest -q` → 59 passed(3회 연속). T07 8개: T07-a 시작→완료·stages·latestRun, T07-b 422 세 경우, T07-c 사연 동봉, T07-d 실행 중 409, T07-e 마감 초과, T07-f 다른 사건 404·usage_events
+- `uv run python -m pytest -q` → 61 passed(3회 연속). T07 10개: T07-a 시작→완료·stages·latestRun, T07-b 422 세 경우, T07-c 사연 동봉, T07-d 실행 중 409, T07-e 마감 초과, T07-f 다른 사건 404·usage_events + 추가 2개(고아 실행 정리, 실행 중 사건 삭제)
 - `uv run ruff check .` → All checks passed, `uv run ruff format --check .` → 이상 없음
 - 구조: `agent/runner.py`(분석기 선택·단계 진행, DB 안 만짐) → `services/analysis.py`의 `DbRecorder`가 step을 바로 커밋. 실행 끝내기는 `status='RUNNING'` 조건 UPDATE라 시간 초과 처리와 겹쳐도 한쪽만 반영
 - 분석기는 아직 빈 분석기(`EmptyAnalyzer`)라 steps가 비어 있다. T08에서 가짜 분석기로 바꾼다
-- 미검증: 서버 재시작으로 스레드가 사라진 실행의 조회 시 시간 초과 처리(코드 경로는 T07-e와 같지만 재시작 상황은 직접 돌리지 않음). 사건 삭제 중 실행 중인 스레드가 조용히 멈추는지(`RunStopped`)
+- 11/21 실제 서버(8099, 임시 SQLite) 확인: 샘플 사건 분석 시작 202 → 폴링 → `SUCCEEDED`, 같은 사연 동봉 시 `inputVersion` 그대로, 본문 없이 202, 422·401·404·2001자 400, CORS 사전 요청(`localhost:5173`, `X-Case-Token` 허용), OpenAPI에 두 경로
+- 11/21 재시작 확인: 서버를 끄고 실행 두 개를 `RUNNING`(시작 200초 전)으로 남긴 뒤 다시 켬 → 실행 조회 시 `FAILED`·`AGENT_TIMEOUT`·stages `DONE/FAILED/PENDING`, 사건 `ERROR` → 다시 분석 202 → `SUCCEEDED`, 사건 `REVIEW_READY`
+- 11/21 실행 중 사건 삭제: 스레드가 "멈춤" 로그만 남기고 끝남(오류 로그 없음), 실행 행은 CASCADE로 삭제, `usage_events`는 남음(테스트로 고정)
+- 동작 참고: 사건 조회(`GET /cases/{id}`)는 끊긴 실행을 정리하지 않아, 재시작 직후 홈 카드는 `ANALYZING`·`RUNNING`으로 보인다. FE가 4번 화면에서 실행을 조회하는 순간 정리된다(계획대로)
 

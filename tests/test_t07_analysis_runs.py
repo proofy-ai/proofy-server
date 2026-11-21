@@ -221,3 +221,65 @@ def test_other_case_run_404_and_usage_event(client, app):
     assert [(e.case_id, e.run_id) for e in events] == [(case_a, run_id)]
     assert events[0].ai_called is False
     assert events[0].agent == "scripted"
+
+
+def _join_analysis_threads(limit: float = 5) -> None:
+    for thread in threading.enumerate():
+        if thread.name.startswith("analysis-"):
+            thread.join(limit)
+            assert not thread.is_alive()
+
+
+# 서버 재시작으로 스레드가 사라진 실행: 조회·시작 때 마감이 지났으면 시간 초과로 정리
+def test_orphan_run_expires_on_read_and_start(client, app):
+    from datetime import timedelta
+
+    from app.models import AnalysisRun
+
+    case_id, auth = _sample(client)
+    run_id = _start(client, case_id, auth).json()["runId"]
+    _wait_done(client, case_id, auth, run_id)
+
+    # 스레드 없이 RUNNING으로 남은 실행을 만든다(재시작 직전 상태)
+    with app.state.session_factory() as db:
+        run = db.get(AnalysisRun, run_id)
+        run.status, run.stage, run.finished_at = "RUNNING", "COMPARING", None
+        run.started_at = run.started_at - timedelta(seconds=200)
+        db.commit()
+
+    # 마감이 지난 고아 실행이 있어도 새 분석은 409가 아니라 시작된다
+    res = _start(client, case_id, auth)
+    assert res.status_code == 202, res.text
+    new_run = res.json()["runId"]
+    assert new_run != run_id
+    old = _get_run(client, case_id, auth, run_id)
+    assert old["status"] == "FAILED"
+    assert old["error"]["code"] == "AGENT_TIMEOUT"
+    assert [s["status"] for s in old["stages"]] == ["DONE", "FAILED", "PENDING"]
+    assert _wait_done(client, case_id, auth, new_run)["status"] == "SUCCEEDED"
+
+
+# 실행 중 사건 삭제: 스레드가 예외 없이 멈추고 실행·사용량 기록 처리가 맞다
+def test_delete_case_while_running(client, app, monkeypatch, caplog):
+    import logging
+
+    from app.models import AnalysisRun
+
+    caplog.set_level(logging.INFO, logger="proofy.analysis")
+
+    analyzer = _WaitingAnalyzer()
+    monkeypatch.setattr(runner, "select_analyzer", lambda agent: analyzer)
+    case_id, auth = _sample(client)
+    run_id = _start(client, case_id, auth).json()["runId"]
+
+    assert client.delete(f"{API}/cases/{case_id}", headers=auth).status_code == 204
+    analyzer.release.set()
+    _join_analysis_threads()
+
+    assert not [r for r in caplog.records if r.levelname in ("ERROR", "CRITICAL")]
+    assert any("멈춤" in r.getMessage() for r in caplog.records)
+    with app.state.session_factory() as db:
+        assert db.get(AnalysisRun, run_id) is None
+        # 사용량 기록은 사건과 따로 남는다(ERD 3.10)
+        events = db.scalars(select(UsageEvent).where(UsageEvent.run_id == run_id)).all()
+        assert len(events) == 1
