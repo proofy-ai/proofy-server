@@ -1,9 +1,10 @@
-# Proofy ERD v1.2 (P0)
+# Proofy ERD v1.3 (P0)
 
 - 작성 2026-11-21 · **데이터 모델 정본.** 구현(`app/models/`)과 다르면 이 문서를 먼저 고치고 구현을 맞춘다
 - 근거: 초안 `etc/proofy_erd_v0.1.md`(레포 밖), 검토 결정 `docs/erd-review.md`, API 계약 `docs/contract.md` v0.6, AI 흐름 `docs/agent-design.md`
 - v1.1(2026-11-21): FE 수정 요청 반영. `usage_events` 추가(한도·비용을 사건과 분리), 증빙 파일을 DB에 저장(`evidence_files`), 인용 검증 기준을 마스킹한 글로 명시, `input_version`은 값이 실제로 바뀔 때만, 상담 안내 실행은 이전 초안 삭제
 - v1.2(2026-11-22, T08): `finding_sources.seq`(근거 화면 순서) 추가, 서류를 지우면 그 서류에서 나온 거래 행·근거도 함께 지움(ON DELETE CASCADE, 결과는 `isStale`), AI 권장 항목 상한 3개와 충족 계산 규칙
+- v1.3(2026-11-22, T09): `drafts.edited_at`(사용자가 저장한 적 있음 → 다시 분석 시 `DRAFT_HAS_EDITS`)
 - DB: 로컬 SQLite, 배포 Postgres. UUID는 문자열(36자), JSON은 SQLAlchemy `JSON` 타입(둘 다 동작), 시각은 UTC로 저장
 - 테이블 생성: 서버 시작 시 생성. 배포 때(T18) Alembic 도입
 
@@ -356,6 +357,7 @@ AI 권장 항목은 한 실행당 최대 3개다. 충족 여부는 `accepted_doc
 | `sentences_json` | JSON | 필수 | `[{sentenceId, section, text, origin: AI·USER, findingIds[], needsCheck, needsCheckReason, confirmed, edited}]`. `section`은 계약 `DraftSection`(사용자 문장은 `null`) |
 | `warnings_json` | JSON | 필수, 기본 `[]` | `CONFLICT_NOT_IN_DRAFT` 등 |
 | `created_at` · `updated_at` | TIMESTAMP(UTC) | 필수 | |
+| `edited_at` | TIMESTAMP(UTC) | NULL 허용 | 사용자가 `PUT`으로 마지막에 저장한 시각. 분석으로 새로 만들면 NULL. 값이 있으면 다시 분석할 때 `409 DRAFT_HAS_EDITS`(T09, v1.3) |
 
 저장하지 않는 것: `unconfirmedCount`, `fullText`(읽을 때 계산). 상담 안내(`referral_json`)가 있는 실행은 초안을 만들지 않고, 그 실행이 성공하면 이 사건의 `drafts` 행을 지운다(계약 4.11: 이때 `GET /draft`는 404).
 

@@ -3,6 +3,7 @@
 from app.models.analysis import AnalysisRun
 from app.models.case import Case, CaseInflow
 from app.models.checklist import ChecklistItemRow
+from app.models.draft import Draft
 from app.models.evidence import Evidence, EvidenceFile
 from app.models.finding import ClaimFinding, FindingSource
 from app.models.transaction import Transaction
@@ -13,6 +14,7 @@ __all__ = [
     "Case",
     "CaseInflow",
     "ChecklistItemRow",
+    "Draft",
     "ClaimFinding",
     "Evidence",
     "EvidenceFile",

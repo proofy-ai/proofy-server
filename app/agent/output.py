@@ -11,6 +11,8 @@ from typing import Literal
 FindingStatus = Literal["MATCH", "CONFLICT", "STATEMENT_ONLY", "UNKNOWN"]
 ConflictField = Literal["AMOUNT", "DATE", "COUNTERPARTY", "OTHER"]
 SourceKind = Literal["NARRATIVE", "EVIDENCE", "TRANSACTION"]
+# 초안 묶음(계약 2절 `DraftSection`). 이 순서대로 쓴다
+DraftSection = Literal["DEPOSIT_REASON", "NO_INVOLVEMENT", "VICTIM_CONTEXT"]
 
 # 한 실행당 AI 권장 항목 상한(계약 4.8)
 MAX_RECOMMENDED = 3
@@ -64,6 +66,19 @@ class RecommendedDoc:
     accepted_doc_types: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class DraftSentence:
+    """초안 문장. 근거는 `AnalysisOutput.findings`의 번호(0부터)로만 가리킨다.
+
+    서버가 번호를 이 실행의 대조 항목 ID로 바꾸고, 없는 번호는 버린다(원칙 3).
+    확인 필요 여부는 분석기가 정하지 않는다(`app/services/drafts.py`).
+    """
+
+    section: DraftSection
+    text: str
+    finding_indexes: tuple[int, ...] = ()
+
+
 @dataclass
 class AnalysisOutput:
     """세 단계가 차례로 채운다."""
@@ -73,3 +88,4 @@ class AnalysisOutput:
     transactions: list[TransactionRow] = field(default_factory=list)
     findings: list[Finding] = field(default_factory=list)
     recommended: list[RecommendedDoc] = field(default_factory=list)
+    draft_sentences: list[DraftSentence] = field(default_factory=list)

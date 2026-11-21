@@ -73,7 +73,8 @@ def test_goods_result_shape(client):
     assert result["isStale"] is False
     assert result["precomputed"] is False
     assert result["referral"] is None
-    assert result["draft"] is None
+    # 초안 내용은 T09 테스트가 본다
+    assert result["draft"] is not None
     assert result["aiNotice"]
 
     findings = result["findings"]

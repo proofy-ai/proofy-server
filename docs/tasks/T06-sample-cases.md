@@ -75,6 +75,7 @@
 - 11/21 사건·증빙 만들기를 `stage_case`·`stage_evidence`(커밋 없이 세션에 넣기)로 나눠 샘플 사건을 한 번에 커밋
 - 11/21 증빙 `created_at`이 Windows 시계 해상도 때문에 같아져 순서가 섞임 → 같거나 이전 값이면 1마이크로초씩 밀어 항상 커지게(`app/services/evidence.py` `_now`)
 - 11/21 샘플 파일은 `Content-Disposition: inline`으로 내려 브라우저에서 바로 열린다
+  - 11/22 T09에서 `attachment`(내려받기)로 바꿈: FE(Cloudflare)와 BE 출처가 달라 `<a download>`가 무시되고, inline이면 같은 탭이 파일 화면으로 바뀌었다(사용자 확인)
 
 ## 결과
 

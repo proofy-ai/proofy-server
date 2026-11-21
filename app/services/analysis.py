@@ -5,7 +5,8 @@
 - 사건당 동시 실행은 1개다. 확인과 실행 행 만들기를 사건별 잠금 안에서 한다(서버 프로세스 1개 전제).
 - 마감(기본 150초)은 스레드가 단계마다 확인한다. 서버 재시작으로 스레드가 사라진 실행은 조회·시작 때
   마감이 지났으면 그 자리에서 시간 초과로 끝낸다.
-- 분석 결과(대조 결과·거래 행·AI 권장 항목)는 실행을 `SUCCEEDED`로 바꾸는 것과 같은 커밋에 저장한다.
+- 분석 결과(대조 결과·거래 행·AI 권장 항목·초안)는 실행을 `SUCCEEDED`로 바꾸는 것과
+  같은 커밋에 저장한다.
   그사이 시간 초과로 끝난 실행이면 결과도 버린다.
 """
 
@@ -39,6 +40,7 @@ from app.schemas.analysis import AnalysisRunOut, AnalysisStart, RunError, StageO
 from app.schemas.case import CasePatch
 from app.services.cases import update_case
 from app.services.clock import utc_now
+from app.services.drafts import has_user_edits
 from app.services.evidence import list_evidence
 from app.services.results import save_output
 from app.services.runs import latest_run
@@ -57,11 +59,6 @@ _case_locks_guard = threading.Lock()
 def _case_lock(case_id: str) -> threading.Lock:
     with _case_locks_guard:
         return _case_locks.setdefault(case_id, threading.Lock())
-
-
-def _has_edited_draft(db: Session, case: Case) -> bool:
-    """사용자가 고친 초안이 있나. 초안 테이블은 T09에서 생기므로 지금은 항상 없다."""
-    return False
 
 
 def _check_precondition(db: Session, case: Case) -> None:
@@ -105,7 +102,7 @@ def start_analysis(
                     "이미 분석 중입니다.",
                     {"runId": current.id},
                 )
-        if _has_edited_draft(db, case) and not payload.overwrite_edited_draft:
+        if has_user_edits(db, case) and not payload.overwrite_edited_draft:
             raise ApiError(
                 409,
                 "DRAFT_HAS_EDITS",
