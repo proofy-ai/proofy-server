@@ -53,6 +53,13 @@ UNEXPECTED_ROWS: tuple[_Row, ...] = (
     ("t2", date(YEAR, 11, 12), "IN", 100_000, "이*호"),
 )
 
+# 서류 속 인용 문구와 그 줄 번호(위에서 0부터).
+# 합성 서류(`scripts/make_samples.py`)도 이 값으로 만든다
+GOODS_CHAT_QUOTE = "3개 12만원에 할게요"
+GOODS_CHAT_REGION = 12
+THREAT_QUOTE = "20만 원 보내면 신고 취하해 줄게"
+THREAT_REGION = 3
+
 
 def _first(ctx: RunContext, doc_type: str) -> EvidenceRef | None:
     return next((e for e in ctx.evidence if e.doc_type == doc_type), None)
@@ -170,10 +177,10 @@ class ScriptedAnalyzer:
             f2_sources.append(
                 Source(
                     "EVIDENCE",
-                    quote="3개 12만원에 할게요",
+                    quote=GOODS_CHAT_QUOTE,
                     evidence_id=chat.evidence_id,
                     page=1,
-                    region_index=12,
+                    region_index=GOODS_CHAT_REGION,
                 )
             )
         out.findings += [
@@ -241,10 +248,10 @@ class ScriptedAnalyzer:
             u3_sources.append(
                 Source(
                     "EVIDENCE",
-                    quote="20만 원 보내면 신고 취하해 줄게",
+                    quote=THREAT_QUOTE,
                     evidence_id=threat.evidence_id,
                     page=1,
-                    region_index=3,
+                    region_index=THREAT_REGION,
                 )
             )
         u3_sources.append(
