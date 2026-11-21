@@ -84,6 +84,10 @@ class ScriptedAnalyzer:
             for e in ctx.evidence:
                 label = DOC_TYPE_LABELS.get(e.doc_type, "서류")
                 rec.step("OCR", f"{e.original_name} 읽기", f"{label}의 글자를 읽었습니다.")
+        # 실제로 뽑은 거래 행(T15, `AGENT_LLM=claude`)이 있으면 정해 둔 행을 넣지 않는다.
+        # 대조는 행을 열쇠가 아니라 날짜·금액으로 찾으므로(`_query`) 실제 행으로도 동작한다
+        if out.transactions:
+            return
         rows = {"GOODS": GOODS_ROWS, "UNEXPECTED": UNEXPECTED_ROWS}.get(ctx.inflow_type, ())
         record = _first(ctx, "TRANSACTION_RECORD")
         if record is None:

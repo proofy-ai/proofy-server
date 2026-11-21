@@ -39,10 +39,17 @@ _KEEP_TAIL = 4
 _LABELED = re.compile(
     rf"(?:^|\s)(?:예금주|대표자|성명)(?:\s*[:：]\s*|\s+)({_HANGUL_NAME})(?![가-힣])"
 )
-# 거래내역 행: 날짜 (시각) 입금|출금 금액 잔액 거래상대
-_TX_ROW = re.compile(
-    r"^\s*\d{4}[-./]\d{1,2}[-./]\d{1,2}(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?\s+"
-    r"(?:입금|출금)\s+[\d,]+\s+[\d,]+\s+(.+?)\s*$"
+# 거래내역 행: 날짜 (시각) 입금|출금 금액 (잔액) 거래상대.
+# 거래 행 추출(T15, `agent/transactions.py`)도 같은 규칙을 쓴다.
+# 두 곳이 다르면 행으로 뽑힌 줄의 거래상대 이름이 가려지지 않는다
+_AMOUNT = r"(?:\d{1,3}(?:,\d{3})+|\d+)(?![\d,])"
+TX_ROW = re.compile(
+    r"^\s*(?P<y>\d{4})[-./](?P<m>\d{1,2})[-./](?P<d>\d{1,2})"
+    r"(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?"
+    r"\s+(?P<dir>입금|출금)"
+    rf"\s+(?P<amount>{_AMOUNT})"
+    rf"(?:\s+{_AMOUNT})?"
+    r"(?:\s+(?P<rest>.*?))?\s*$"
 )
 # 씨 뒤에는 조사가 붙을 수 있다(`김민수 씨에게`). `아저씨`·`아가씨`·`마음씨`는 이름이 아니다
 _NARRATIVE_SSI = re.compile(r"(?<![가-힣])([가-힣]{2,3})\s?씨")
@@ -96,9 +103,9 @@ def collect_names(lines: Iterable[str]) -> set[str]:
     names: set[str] = set()
     for line in lines:
         names.update(_LABELED.findall(line))
-        row = _TX_ROW.match(line)
-        if row and re.fullmatch(_HANGUL_NAME, row.group(1)):
-            names.add(row.group(1))
+        row = TX_ROW.match(line)
+        if row and row["rest"] and re.fullmatch(_HANGUL_NAME, row["rest"]):
+            names.add(row["rest"])
     return names
 
 

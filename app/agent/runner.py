@@ -9,7 +9,7 @@
 넘겨받은 증빙 저장소(`EvidenceStore`)로만 한다.
 
 ① 단계 분석기 전에 읽은 서류 줄과 사연을 가린다(T14, `app.agent.masking`). 가짜 분석에서도 사연은
-가린다. AI는 가린 글만 본다(원칙 4).
+가린다. AI는 가린 글만 본다(원칙 4). 그다음 거래내역서 줄에서 거래 행을 코드 규칙으로 뽑는다(T15).
 """
 
 import time
@@ -27,6 +27,7 @@ from app.agent.masking import (
 )
 from app.agent.output import AnalysisOutput
 from app.agent.steps import STAGES, AgentTimeout, Recorder
+from app.agent.transactions import parse_rows
 
 
 @dataclass(frozen=True)
@@ -136,6 +137,24 @@ def _mask_inputs(ctx: RunContext, out: AnalysisOutput, store: EvidenceStore | No
     out.masked_narrative = mask_text(ctx.narrative, names)
 
 
+def _extract_transactions(ctx: RunContext, rec: Recorder, out: AnalysisOutput) -> None:
+    """읽은 거래내역서 줄에서 거래 행을 코드 규칙으로 뽑는다(T15). 저장은 서비스 계층이 한다."""
+    for e in ctx.evidence:
+        ex = out.extractions.get(e.evidence_id)
+        if e.doc_type != "TRANSACTION_RECORD" or ex is None or ex.status != "READY":
+            continue
+        rows = parse_rows(ex.regions, e.evidence_id, start_key=len(out.transactions) + 1)
+        out.transactions.extend(rows)
+        title = f"{e.original_name} 거래내역 행 정리"
+        if rows:
+            ins = sum(r.direction == "IN" for r in rows)
+            summary = f"거래 {len(rows)}건(입금 {ins}, 출금 {len(rows) - ins})을 찾았습니다."
+            rec.step("OCR", title, summary)
+        else:
+            summary = "거래 행을 찾지 못했습니다. 결과에서 직접 확인해 주세요."
+            rec.step("OCR", title, summary, "FAILED")
+
+
 def _extract_summary(result: Extraction) -> str:
     if result.status == "FAILED":
         return f"글자를 읽지 못했습니다({result.error}). 결과 화면에서 직접 확인으로 안내합니다."
@@ -167,6 +186,7 @@ def execute(
             if ctx.agent == "claude" and store is not None:
                 _extract_evidence(ctx, rec, store, out)
             _mask_inputs(ctx, out, store)
+            _extract_transactions(ctx, rec, out)
         steps[stage](ctx, rec, out)
     ctx.check_deadline()
     return out
