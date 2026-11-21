@@ -5,6 +5,7 @@
 
 - API 계약: [`docs/contract.md`](docs/contract.md)
 - 작업 계획과 진행 상태: [`docs/tasks/README.md`](docs/tasks/README.md)
+- 배포(Render + Neon, Docker): [`docs/deploy.md`](docs/deploy.md)
 
 ## 실행
 
