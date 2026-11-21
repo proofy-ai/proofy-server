@@ -61,7 +61,7 @@ T00 규칙
 | [T01](T01-project-skeleton.md) | 프로젝트 뼈대(전체 구조, CI) | | 완료 | #3 | #22 |
 | [T02](T02-deadline.md) | D-day 계산 | 1·2·3 | 완료 | #4 | #23 |
 | [T03](T03-cases-api.md) | 사건 API | 4·5·7 | 완료 | #5 | #35 |
-| [T04](T04-requirements-checklist.md) | 서류 목록·체크리스트 | | 대기 | #6 | |
+| [T04](T04-requirements-checklist.md) | 서류 목록·체크리스트 | | 계획 확인 | #6 | |
 | [T05](T05-evidence-upload.md) | 증빙 업로드 | | 대기 | #7 | |
 | [T06](T06-sample-cases.md) | 체험 계정(샘플 사건) | 6 | 대기 | #8 | |
 
