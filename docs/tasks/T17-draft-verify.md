@@ -7,6 +7,9 @@
 - Claude 1회 호출로 초안 문장 + 근거 번호
 - 후검증: 인용 원문 대조, 이번 실행에서 조회한 거래 ID만 인정, 같은 사건 소속 확인, 문장 속 숫자 대조, 판정성 표현
 - 실패 문장은 지우지 않고 확인 필요
+- 초안 문장마다 `section`(입금 경위 → 가담하지 않았다는 설명 → 피해 경위, 계약 v0.5 `DraftSection`)
+- `NUMBER_MISMATCH`·`JUDGMENT_EXPRESSION` 문장만 AI가 1회 고쳐 쓰고 재검증, 또 걸리면 원래 문장 + 확인 필요(`docs/agent-design.md` 2.6). step `VERIFY`
+- 방식 참고: corebank `worker.py` 인용 대조, DonWorry `narrative.py` 근거 번호 enum·숫자 검사(코드는 새로 작성)
 
 ## 제외
 

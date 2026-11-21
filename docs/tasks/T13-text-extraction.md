@@ -7,6 +7,8 @@
 - 텍스트 PDF는 OCR 없이 추출, 이미지·스캔 PDF는 Tesseract OCR
 - 줄 단위 영역 저장, 신뢰도 낮은 영역 수, 못 읽은 서류는 `FAILED`로 두고 계속
 - 추출기는 인터페이스로(배포에서 OCR이 막히면 교체)
+- 가져오는 코드: corebank `preprocess.py` 전체, `ocr.py`(Tesseract 실행·`parse_tsv` 등). 범위·바꿀 점은 `docs/agent-design.md` 6절. 커밋 메시지에 원본 파일·범위 기록
+- 텍스트 PDF 추출(`pypdf`)은 새로 작성
 
 ## 제외
 
