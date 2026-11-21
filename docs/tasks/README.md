@@ -41,8 +41,8 @@ T00 규칙
 
 | 작업 | 내용 | 계약 테스트 | 상태 | 이슈 | PR |
 |---|---|---|---|---|---|
-| [T01](T01-project-skeleton.md) | 프로젝트 뼈대(전체 구조, CI) | | PR | #3 | #22 |
-| [T02](T02-deadline.md) | D-day 계산 | 1·2·3 | 대기 | #4 | |
+| [T01](T01-project-skeleton.md) | 프로젝트 뼈대(전체 구조, CI) | | 완료 | #3 | #22 |
+| [T02](T02-deadline.md) | D-day 계산 | 1·2·3 | PR | #4 | |
 | [T03](T03-cases-api.md) | 사건 API | 4·5·7 | 대기 | #5 | |
 | [T04](T04-requirements-checklist.md) | 서류 목록·체크리스트 | | 대기 | #6 | |
 | [T05](T05-evidence-upload.md) | 증빙 업로드 | | 대기 | #7 | |
