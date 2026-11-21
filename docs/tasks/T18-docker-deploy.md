@@ -1,6 +1,6 @@
 # T18 Docker·배포
 
-- 단계: 4단계 배포·마무리 · 예정: 11/22 새벽(T14 앞으로 당김) · 상태: 진행 중 · 이슈: #20 · PR: 없음
+- 단계: 4단계 배포·마무리 · 예정: 11/22 새벽(T14 앞으로 당김) · 상태: 완료 · 이슈: #20 · PR: #52
 
 ## 범위
 
@@ -62,5 +62,9 @@
 - 코드(PR 1): `Dockerfile`(python 3.12-slim + tesseract-ocr-kor + poppler, `uv sync --locked --no-dev`, 비루트 사용자, `PORT`·프록시 헤더), `.dockerignore`, `psycopg[binary]`, `app/db.py` 주소 바꾸기·`pool_pre_ping`, `docs/deploy.md` 안내서, 단위 테스트 `tests/test_t18_deploy.py`
 - **로컬 리허설(11/22, Docker `postgres:17` + 이미지, `PORT=10000`):** 점검 스크립트(스크래치) 20개 항목 모두 통과 — health, CORS 사전 요청, 샘플 5개 내려받기(attachment), 두 시나리오 샘플 사건·분석·결과·초안 저장, 직접 만든 사건에 서류 올리기, 삭제. `AGENT_LLM=claude`로 실제 추출: GOODS 7.0초(PDF 12줄, 대화 18줄, 사업자 15줄), UNEXPECTED 3.2초, Postgres `regions_json`에 한글 정상(대화 12번 줄 "3개 12만원에 할게요"). 메모리 약 103MB(무료 512MB 안)
 - `uv run python -m pytest -q` 114 passed·2 skipped, ruff 통과
-- 남은 것: Render·Neon 연결(사용자), 공개 주소 점검과 무료 서버 OCR 시간 측정, FE 주소 CORS
+- **배포(11/22): https://proofy-server.onrender.com** — Render Free(0.1 CPU, 512MB, 싱가포르, 브랜치 `dev`, Health Check `/api/v1/health`) + Neon(싱가포르, 풀링 끈 직접 연결). 환경변수 `DATABASE_URL`·`AGENT_LLM=scripted`·`DEMO_MODE=true`·`CORS_ORIGINS=https://proofy-app.pages.dev,http://localhost:5173`. FE 대표 주소 `https://proofy-app.pages.dev`(Cloudflare Pages)
+- 공개 주소 점검 20개 항목 통과(FE 주소 기준 CORS 포함). 루트 `/`는 404가 정상
+- **무료 서버 OCR 측정(`AGENT_LLM=claude` 잠깐):** test01 82.0초, test02 40.3초(로컬의 약 11배). 결과 글자는 로컬과 같음. 계약 마감 150초 안에 Claude 단계까지 들어가기 어렵다
+- 결정(11/22 사용자): Render는 **나중에 $7(Starter, 0.5 CPU, 잠들지 않음)로 올린다. T16 뒤 `AGENT_LLM=claude`로 바꾸기 전에 먼저 올린다.** 합성 서류 글자 캐시(B안)는 $7이면 필요 없어 하지 않음
+- 동결 때 할 일(T20): Render 브랜치 `main`으로, `CORS_ORIGINS`에서 `localhost` 제거
 
