@@ -1,6 +1,6 @@
 # T02 D-day 계산
 
-- 단계: 1단계 사건·증빙 · 예정: 11/21 밤 · 상태: PR · 이슈: #4 · PR: 없음
+- 단계: 1단계 사건·증빙 · 예정: 11/21 밤 · 상태: PR · 이슈: #4 · PR: #23
 
 ## 범위
 
@@ -57,4 +57,4 @@
 
 - `uv run ruff check .` → All checks passed / `uv run ruff format --check .` → 통과
 - `uv run python -m pytest -q` → 15 passed (T02 11개: 계약 테스트 1 1개, 2 5개, 3 4개, JSON 모양 1개 + T01 4개)
-
+- CI: PR #23에서 GitHub Actions `test` 통과(10초)
