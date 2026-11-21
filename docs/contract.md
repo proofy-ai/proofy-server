@@ -1,7 +1,7 @@
-# Proofy FE–BE API 계약 v0.6.5
+# Proofy FE–BE API 계약 v0.7
 
-- 작성일: 2026-11-21 · 상태: **BE 결정 반영, FE 확인 후 "합의됨"으로 바꾼다**
-- 화면 기준: `docs/screen-flow.md`(흐름 화면 6개 + 체험 계정 선택·내 사건) · 데이터 기준: `docs/erd.md` · AI 흐름: `docs/agent-design.md`
+- 작성일: 2026-11-21(v0.7 2026-11-22) · 상태: **BE 결정 반영, FE 확인 후 "합의됨"으로 바꾼다**
+- 화면 기준: `docs/screen-flow.md`(흐름 화면 6개 + 2A 내 상황 정리 + 체험 계정 선택·내 사건) · 데이터 기준: `docs/erd.md` · AI 흐름: `docs/agent-design.md`
 - 서버 실행 중 실제 스키마는 `GET /docs`(FastAPI OpenAPI)에서 확인한다. **이 문서와 OpenAPI가 다르면 이 문서가 정본**이고, 서버를 고친다.
 
 ## 0. 합의 규칙과 일정
@@ -86,19 +86,21 @@
 | `NeedsCheckReason` | `CONFLICT` 자료와 어긋난 내용 · `NO_SOURCE` 근거 없음 · `QUOTE_NOT_FOUND` 인용을 원문에서 못 찾음 · `NUMBER_MISMATCH` 숫자가 근거와 다름 · `JUDGMENT_EXPRESSION` 판정처럼 읽히는 표현 · `SOURCE_UNREAD` 근거 서류를 못 읽음 | 탭 C "확인 필요" 툴팁. 여러 사유가 겹치면 이 순서대로 앞의 것 하나만 준다 |
 | `DeadlineState` | `UNKNOWN_NOTICE_DATE` 공고일 확인 필요 · `OK` · `URGENT` 7일 이하 · `EXPIRED` 지남 | D-day 배지 색 |
 | `SampleScenario` | `GOODS` 물품 거래(청년 1인 온라인 판매 사업자, 체험 계정 test01) · `UNEXPECTED` 모르는 입금(통장 묶기, test02) · `SALARY` 급여(P1, 체험 계정 없음) | 샘플 체험 |
+| `LegalGuideStage` | `SITUATION` 내 상황 정리(2A 화면) · `SUBMIT` 제출 안내(6번 화면) | 법령 안내를 어느 화면에 보여 줄지(4.2.1) |
 
 ## 3. 화면별 호출
 
 | 화면 | 호출 |
 |---|---|
-| L 체험 계정 선택(로그인) | 체험 계정 버튼: `POST /cases/sample { scenario }` → 응답을 localStorage 목록 맨 앞에 넣고 3번 화면(서류가 채워진 상태)으로. "직접 해 보기": 2번 화면으로 |
+| L 체험 계정 선택(로그인) | 체험 계정 버튼: `POST /cases/sample { scenario }` → 응답을 localStorage 목록 맨 앞에 넣고 3번 화면(서류가 채워진 상태)으로(2A는 건너뛰고 3번 위 링크로 볼 수 있다). "직접 해 보기": 2번 화면으로 |
 | 1 홈 | 서버 호출 없음. localStorage 목록이 있으면 "내 사건" 링크를 보여 준다. "샘플로 체험하기"는 L 화면으로 |
 | M 내 사건(마이페이지) | localStorage 목록의 사건마다 `GET /cases/{id}` → 카드(유형·D-day·현재 단계·이어서 하기). 401·404면 목록에서 빼고 "만료된 사건을 정리했어요" 안내. 삭제: `DELETE /cases/{id}` 후 목록에서 제거 |
-| 2 내 상황 | "다음": `POST /cases`(처음) 또는 `PATCH /cases/{id}`(수정). 응답의 `deadline`으로 D-day 표시 |
-| 3 사연·증빙 | `GET /meta/requirements?inflowType=` 또는 `GET /cases/{id}/checklist` · `PATCH /cases/{id}`(사연, 입력 멈춘 뒤 1초 자동 저장) · `POST/DELETE /cases/{id}/evidence` · `GET /samples`(샘플 서류 내려받기 링크) · "분석 시작": `POST /cases/{id}/analysis-runs`에 **현재 사연을 `narrative`로 함께 보낸다**. 사연 20자 미만이거나 `requiredForAnalysis` 항목이 `SATISFIED`가 아니면 버튼을 비활성화하고 이유를 보여 준다(서버도 422로 막는다) |
+| 2 내 상황 | "다음": `POST /cases`(처음) 또는 `PATCH /cases/{id}`(수정). 응답의 `deadline`으로 D-day 표시 → **2A로** |
+| 2A 내 상황 정리 | `GET /legal-guides?inflowType=`(사건의 `inflow.type`) → `stage: SITUATION` 항목을 순서대로 보여 준다. `commonForType: true` 항목에 "이 유형에서 보통 쓰는 사유" 표시, 아래에 `disclaimer`. 버튼: "다음" → 3번, "내 경우와 달라요(입금 유형 다시 고르기)" → 2번. 상단 D-day는 2번과 같음 |
+| 3 사연·증빙 | 위쪽에 "내 상황 정리 다시 보기" 링크(→ 2A) · `GET /meta/requirements?inflowType=` 또는 `GET /cases/{id}/checklist` · `PATCH /cases/{id}`(사연, 입력 멈춘 뒤 1초 자동 저장) · `POST/DELETE /cases/{id}/evidence` · `GET /samples`(샘플 서류 내려받기 링크) · "분석 시작": `POST /cases/{id}/analysis-runs`에 **현재 사연을 `narrative`로 함께 보낸다**. 사연 20자 미만이거나 `requiredForAnalysis` 항목이 `SATISFIED`가 아니면 버튼을 비활성화하고 이유를 보여 준다(서버도 422로 막는다) |
 | 4 분석 중 | `GET /cases/{id}/analysis-runs/{runId}` 1.5초 간격 폴링 |
 | 5 결과 | `GET /cases/{id}/result` · `PATCH /cases/{id}/checklist/{itemId}` · `PUT /cases/{id}/draft`. **`result.referral`이 있으면 탭 A~C 대신 상담 안내 카드만 보여 주고 6번으로 가는 버튼을 숨긴다(4.11)** |
-| 6 제출 가이드 | 서버 호출 없음(정적 문구). 최종 점검 수치는 5번에서 받은 `result.summary`와 `draft.unconfirmedCount` 사용 · "이 사건 지우기": `DELETE /cases/{id}` 후 localStorage 목록에서 제거 |
+| 6 제출 가이드 | `GET /legal-guides?inflowType=`의 `stage: SUBMIT` 항목(어디에 무엇을 내나, 신청서 "이의제기 사유" 칸)을 보여 준다. 그 밖의 문구는 정적. 최종 점검 수치는 5번에서 받은 `result.summary`와 `draft.unconfirmedCount` 사용 · "이 사건 지우기": `DELETE /cases/{id}` 후 localStorage 목록에서 제거 |
 
 ## 4. 엔드포인트
 
@@ -203,6 +205,47 @@
   - 모르는 입금: `UNKNOWN_DEPOSIT_RECORD`. 같은 이유로 `ANALYSIS_INPUT` 묶음에 있다.
 - `OTHER`(화면에 없는 값)는 공통 항목(`OBJECTION_FORM`, `ID_COPY`, `NOTICE`)과 `DEPOSIT_RECORD`(거래내역서, `ANALYSIS_INPUT`, `requiredForAnalysis: true`)만 준다. 분석 시작 조건이 모든 유형에 거래내역서를 요구하기 때문이다.
 - 이 절에 문구가 없는 항목의 `note`는 `null`이다. 고정 항목은 어느 사건에나 맞는 내용만 담고, 사건 상황에 맞춘 안내는 분석 후 `AI_RECOMMENDED` 항목과 탭 A의 어긋남 경고가 맡는다.
+
+### 4.2.1 `GET /legal-guides?inflowType=GOODS` — 법령 안내 (화면 2A·6)
+
+인증 없음. 사건 없이도 부른다. 통신사기피해환급법·시행령 현행 원문(법 시행 2026.10.2, 시행령 시행 2026.10.1, 레포 `docs/legal/`)을 쉬운 말로 옮긴 고정 안내다. **사건을 보고 판정하지 않는다.** 입금 유형에 따라 항목과 표시만 달라진다.
+
+```json
+{
+  "inflowType": "GOODS",
+  "disclaimer": "이 안내는 법 조항을 쉬운 말로 옮긴 것입니다. 내 경우가 어느 사유에 해당하는지는 은행이 판단합니다.",
+  "items": [
+    {
+      "code": "REASON_2",
+      "stage": "SITUATION",
+      "title": "사유 2. 정당하게 받은 돈",
+      "plain": "묶인 돈이 물건·서비스를 주고 받은 대가이거나 급여처럼 정당하게 받은 돈이라는 것을 객관적인 자료로 보여 주는 경우입니다. …",
+      "quote": "제9조에 따라 소멸될 채권의 전부 또는 일부를 명의인이 재화 또는 용역의 공급에 대한 대가로 받았거나 … 그러하지 아니하다.",
+      "commonForType": true,
+      "sourceRef": { "label": "통신사기피해환급법 제7조제1항제2호", "url": "https://www.law.go.kr/LSW/lsInfoP.do?lsiSeq=290245" },
+      "effectiveDate": "2026-10-02"
+    }
+  ]
+}
+```
+
+- 항목은 화면에 보여 줄 순서대로 온다. FE는 `stage`로 걸러 2A(`SITUATION`)와 6번(`SUBMIT`)에 나눠 보여 준다
+- `title`·`plain`은 화면에 그대로 쓴다. `quote`는 법령 원문 발췌("원문 보기" 접기 등)이고, 떨어진 두 곳을 이을 때 ` … `를 쓴다. `effectiveDate`는 근거 법령의 시행일
+- `commonForType: true` = 이 입금 유형에서 **보통** 쓰는 이의제기 사유. 해당 여부를 판정한 값이 아니므로 "해당합니다"가 아니라 "보통 이 사유로 이의제기합니다"처럼 표시한다. 사유 세 가지(`REASON_1~3`)는 유형과 상관없이 모두 오므로 나머지 사유도 함께 보여 준다
+- 문구의 정본은 서버(`app/services/legal.py`)다. FE는 문구를 하드코딩하지 않는다. 아래 표는 어떤 항목이 오는지만 정한다
+- 잘못된 `inflowType`은 `400 VALIDATION_ERROR`(4.2와 같다)
+
+| code | stage | 내용 | 근거 | 오는 유형 · `commonForType: true`인 유형 |
+|---|---|---|---|---|
+| `WHAT_HAPPENED` | SITUATION | 무슨 일이 일어났나(지급정지, 전자금융거래 제한) | 법 제4조① | 전체 |
+| `DEADLINE` | SITUATION | 기한: 공고일부터 2개월, 지나면 권리 소멸 | 법 제7조①, 제9조① | 전체 |
+| `REASON_1` | SITUATION | 사유 1. 사기에 쓰인 계좌가 아님 | 법 제7조①1호 | 전체 · 없음 |
+| `REASON_2` | SITUATION | 사유 2. 정당하게 받은 돈(객관적 자료, 알았거나 중대한 과실이면 제외) | 법 제7조①2호 | 전체 · `SALARY`·`GOODS` |
+| `REASON_3` | SITUATION | 사유 3. 피해금을 빼돌리는 데 쓰인 계좌가 아님(인정되면 피해금 뺀 나머지 해제) | 법 제7조①3호, 제8조①2호 단서 | 전체 · `UNEXPECTED` |
+| `HOLD_TWO_MONTHS` | SITUATION | 이의제기해도 최대 2개월 묶일 수 있음 | 법 제8조②2호 | 전체 |
+| `DONT_PAY_THREAT` | SITUATION | "돈 보내면 취소해 주겠다"는 연락에 응하지 말 것 | 시행령 제8조①1호 | `UNEXPECTED`만 |
+| `HOW_TO_SUBMIT` | SUBMIT | 계좌가 있는 은행에 신청서·증명 자료·신분증 사본 제출 | 시행령 제7조 | 전체 |
+| `REASON_FIELD` | SUBMIT | 신청서 "이의제기 사유" 칸에 초안을 옮겨 적기 | 시행령 별지 제4호서식 | 전체 |
 
 ### 4.3 `POST /cases` — 사건 만들기 (화면 2 "다음")
 
@@ -684,6 +727,7 @@ FE는 1.5초마다 부르고 `status`가 `RUNNING`이 아니면 멈춘다. 180�
 | 2026-11-21 | 0.2 | ① 사건은 화면 2 "다음"에서 생성 확정(사연은 화면 3에서 `PATCH`) ② `COMPARING` 문구를 "거래내역과 대조 중"으로, FE는 `stages[].label`만 표시 ③ 요구 서류에 `requiredForAnalysis` 추가, 거래내역서를 분석 시작 조건으로(`422`의 `details.missing`) |
 | 2026-11-21 | 0.3 | 외부 검토 반영. ① 초안: `CONFLICT` 연결 문장 자동 확인 필요, 진술 값 일치 시 서버가 연결, `warnings`, 문장별 `confirmed`·`unconfirmedCount`, 복사·PDF 전 확인창 ② 개인정보 보장 항목·`demoMode`·합성 데이터 안내 ③ `POST /cases/sample`, `GET /samples` 샘플 체험 ④ 일정에 리허설·소개서·제출(업로드+이메일) ⑤ `ANALYSIS_INPUT` 분류 신설, 물품 거래는 사업자 판매 대금 전제·예시를 청년 1인 판매 사업자로 ⑥ IP당 사건 생성 제한, `DAILY_LIMIT` ⑦ 미래 날짜 400 ⑧ 분석 시작에 `narrative` 동봉 ⑨ CORS 허용 헤더 |
 | 2026-11-21 | 0.4 | 체험 계정·마이페이지. ① L 체험 계정 선택(test01 `GOODS`, test02 `UNEXPECTED`), M 내 사건 화면 추가, 서버 인증은 그대로 ② localStorage `proofy.case` 한 건 → `proofy.cases` 배열 ③ `UNEXPECTED` 화면 노출, 유형별 항목(`THREAT_MESSAGE`, `UNKNOWN_DEPOSIT_RECORD`), 샘플 시나리오 추가, `SALARY` 샘플은 P1 ④ `case.sampleScenario` 추가 ⑤ 샘플 사건은 AI 실패·하루 한도 초과 때 미리 만든 결과로 끝남(`result.precomputed`, step `FALLBACK`) ⑥ 상담 안내 검사: 통장 대여·송금 대행 표현이 사연에 있으면 초안 대신 `result.referral`(step `SAFETY`) |
+| 2026-11-22 | 0.7 | **화면 2A "내 상황 정리" 추가(2번과 3번 사이)**와 4.2.1 `GET /legal-guides` 추가. 2번 "다음"은 2A로, 3번 위에 2A 링크, 6번 제출 안내는 같은 API의 `SUBMIT` 항목. 체험 계정은 그대로 3번으로. 2절 `LegalGuideStage`. 기존 응답 모양 변경 없음 |
 | 2026-11-22 | 0.6.5 | 4.8: `AI_RECOMMENDED` 항목은 한 실행당 최대 3개, 고정 항목이 받는 `docType`으로는 자동 충족되지 않음(`MISSING`, 사용자가 `checked`로 표시). 4.2 `UNEXPECTED`에 같은 설명. 응답 모양 변경 없음 |
 | 2026-11-22 | 0.6.4 | FE 코드(타입·목 서버)와 대조해 정하지 않았던 곳을 명시(이슈 #40). ① 4.4·5절: 공고일을 모를 때 `deadline.basis`는 `null`이 아니라 문장(FE가 이미 문장으로 처리) ② 4.1 `dailyUsage`를 지금부터 실제로 준다(오늘 외부 AI를 부른 분석 수, 한도 `DAILY_ANALYSIS_LIMIT`). 한도 초과 429는 그대로 ③ 4.7 `lowConfidenceRegions`는 정수 또는 `null`(FE 타입 `unknown[]`은 `number`로, 지금은 항상 `null`) ④ 4.3.1 test02: "바로 은행에 알렸다"는 AI 권장 항목이 아니라 고정 항목 `INCIDENT_REPORT`로 보인다(탭 B에 같은 서류가 두 번 나오지 않게). **FE 코드 수정 없이 동작한다** |
 | 2026-11-21 | 0.6.3 | 4.3.1 설명 보충: 샘플 사건 날짜 규칙(통지일·공고일만 상대, 입금일·사연·서류 날짜 고정), `SALARY` 샘플은 준비 전까지 400, 서류는 사건마다 복사본. 응답 모양 변경 없음 |
