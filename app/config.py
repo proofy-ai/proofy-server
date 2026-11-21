@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     scripted_stage_delay_seconds: float = 1.0
     # 서비스 전체 하루 AI 분석 한도(계약 1.1·4.1). 표시는 지금, 막는 것은 T11
     daily_analysis_limit: int = 300
+    # 글자 추출(T13). 비우면 PATH에서 찾는다(Windows는 설치 경로를 넣는다)
+    tesseract_cmd: str | None = None
+    pdftoppm_cmd: str | None = None
+    ocr_lang: str = "kor+eng"
 
     @property
     def cors_origin_list(self) -> list[str]:

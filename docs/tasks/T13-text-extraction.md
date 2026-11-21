@@ -56,3 +56,9 @@
 
 ## 결과
 
+- 구조: `app/agent/extract/`(`__init__` 입구·`Extraction`, `pdf_text` 새로 작성, `ocr`·`preprocess` corebank에서 가져옴, `__main__` 확인 명령). runner ① 단계가 `AGENT_LLM=claude`일 때 서류마다 읽고 `DbEvidenceStore`로 바로 저장. 이미 `READY`면 다시 쓰고, 가짜 분석기는 실제 추출 step이 있으면 흉내 step을 남기지 않음
+- `AnalysisOutput.extractions`(evidenceId → 추출 결과)에 담아 다음 단계(T14 마스킹, T15 거래 행, T16 대조)가 쓴다
+- **Docker 컨테이너(python:3.12-slim + tesseract 5.5.0 kor + poppler) 확인(11/22):** 대화 PNG 18줄, 12번 줄 = "3개 12만원에 할게요"(0.94) / 협박 문자 7줄, 3번 줄 = "20만 원 보내면 신고 취하해 줄게"(0.95) / 사업자등록증명 15줄. 전처리 덕에 전처리 없는 tesseract보다 오인식이 적음(빼·샘플로 정확). 빨간 띠의 흰 글씨("합성 데이터")는 일부 틀리게 읽힘(대조에 안 쓰는 줄). 시간: 대화 4.2초, 사업자등록증명 2.1초, 협박 2.9초, PDF 0.0초
+- 테스트 `tests/test_t13_extraction.py`(계획 a~e): 이 PC `uv run python -m pytest -q` 110 passed·2 skipped(OCR 테스트, Tesseract 없음), 컨테이너에서 112 passed. `uv run ruff check .` 통과
+- 미검증: 배포 환경(Render)의 OCR 속도, 휴대폰 사진(기울기·조명) 실물
+

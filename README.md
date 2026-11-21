@@ -59,5 +59,9 @@ DISABLE_SQLALCHEMY_CEXT=1 uv sync --no-binary-package sqlalchemy --reinstall-pac
 | `AGENT_LLM` | `scripted` | `scripted`(가짜 분석) 또는 `claude` |
 | `DEMO_MODE` | `true` | 시연용 안내 표시 여부(계약 4.1) |
 | `ANTHROPIC_API_KEY` | 없음 | `AGENT_LLM=claude`일 때만. 레포에 넣지 않습니다 |
+| `TESSERACT_CMD` · `PDFTOPPM_CMD` | 없음(PATH에서 찾음) | 그림·스캔 PDF 글자 인식 프로그램 경로. 없으면 그 서류만 "읽지 못함"으로 두고 분석은 계속합니다 |
+| `OCR_LANG` | `kor+eng` | Tesseract 언어(한글 데이터 `tesseract-ocr-kor` 필요) |
+
+글자 추출은 `AGENT_LLM=claude`일 때만 돕니다. 글자가 든 PDF는 OCR 없이 읽고, 그림은 Tesseract로 읽습니다. 한 파일을 확인하려면 `uv run python -m app.agent.extract 파일`.
 
 DB 테이블은 서버가 시작할 때 만듭니다. 스키마가 바뀌면 로컬 DB 파일(`proofy.sqlite3`)을 지우고 다시 실행합니다.

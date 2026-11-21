@@ -22,6 +22,7 @@ from sqlalchemy import update
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.agent import runner
+from app.agent.extract import Extraction
 from app.agent.output import AnalysisOutput
 from app.agent.runner import EvidenceRef, RunContext
 from app.agent.steps import (
@@ -35,7 +36,7 @@ from app.agent.steps import (
 )
 from app.config import Settings
 from app.errors import ApiError
-from app.models import AnalysisRun, Case, UsageEvent
+from app.models import AnalysisRun, Case, Evidence, EvidenceFile, UsageEvent
 from app.schemas.analysis import AnalysisRunOut, AnalysisStart, RunError, StageOut, StepOut
 from app.schemas.case import CasePatch
 from app.services.cases import update_case
@@ -149,10 +150,14 @@ def start_analysis(
         narrative=case.narrative or "",
         sample_scenario=case.sample_scenario,
         evidence=tuple(
-            EvidenceRef(e.id, e.doc_type, e.original_name) for e in list_evidence(db, case.id)
+            EvidenceRef(e.id, e.doc_type, e.original_name, e.extract_status)
+            for e in list_evidence(db, case.id)
         ),
         deadline=time.monotonic() + settings.analysis_timeout_seconds,
         stage_delay_seconds=settings.scripted_stage_delay_seconds,
+        ocr_lang=settings.ocr_lang,
+        tesseract_cmd=settings.tesseract_cmd,
+        pdftoppm_cmd=settings.pdftoppm_cmd,
     )
     threading.Thread(
         target=_run_in_background,
@@ -165,8 +170,9 @@ def start_analysis(
 
 def _run_in_background(session_factory: sessionmaker[Session], ctx: RunContext) -> None:
     recorder = DbRecorder(session_factory, ctx.run_id)
+    store = DbEvidenceStore(session_factory, ctx.case_id)
     try:
-        output = runner.execute(ctx, recorder)
+        output = runner.execute(ctx, recorder, store)
     except RunStopped:
         logger.info("분석 %s: 밖에서 끝난 실행이라 멈춤", ctx.run_id)
         return
@@ -290,6 +296,64 @@ class DbRecorder:
             if error is None and output is not None:
                 save_output(db, run, output)
             _finish_run(db, run, error)
+
+
+class DbEvidenceStore:
+    """분석 스레드의 증빙 저장소(`app.agent.runner.EvidenceStore`).
+
+    추출 결과는 실행 성공 여부와 상관없이 바로 저장한다(서류의 성질이라 다음 분석에서 다시 쓴다).
+    이 사건의 서류만 다룬다. 분석 중에 지워진 서류는 건너뛴다.
+    """
+
+    def __init__(self, session_factory: sessionmaker[Session], case_id: str) -> None:
+        self._session_factory = session_factory
+        self._case_id = case_id
+
+    def _evidence(self, db: Session, evidence_id: str) -> Evidence | None:
+        evidence = db.get(Evidence, evidence_id)
+        if evidence is None or evidence.case_id != self._case_id:
+            return None
+        return evidence
+
+    def content(self, evidence_id: str) -> bytes | None:
+        with self._session_factory() as db:
+            if self._evidence(db, evidence_id) is None:
+                return None
+            file = db.get(EvidenceFile, evidence_id)
+            return None if file is None else file.content
+
+    def mark_processing(self, evidence_id: str) -> None:
+        with self._session_factory() as db:
+            evidence = self._evidence(db, evidence_id)
+            if evidence is not None:
+                evidence.extract_status = "PROCESSING"
+                db.commit()
+
+    def save_extraction(self, evidence_id: str, result: Extraction) -> None:
+        with self._session_factory() as db:
+            evidence = self._evidence(db, evidence_id)
+            if evidence is None:
+                return
+            evidence.extract_status = result.status
+            evidence.extract_method = result.method
+            evidence.extracted_text = result.text if result.status == "READY" else None
+            evidence.regions_json = result.regions if result.status == "READY" else None
+            evidence.low_confidence_regions = result.low_confidence
+            evidence.extract_error = result.error
+            evidence.extracted_at = utc_now()
+            db.commit()
+
+    def load_extraction(self, evidence_id: str) -> Extraction | None:
+        with self._session_factory() as db:
+            evidence = self._evidence(db, evidence_id)
+            if evidence is None or evidence.extract_status != "READY":
+                return None
+            return Extraction(
+                status="READY",
+                method=evidence.extract_method,  # type: ignore[arg-type]
+                regions=list(evidence.regions_json or []),
+                low_confidence=evidence.low_confidence_regions,
+            )
 
 
 def get_run(db: Session, case: Case, run_id: str, timeout_seconds: float) -> AnalysisRun:

@@ -80,9 +80,11 @@ class ScriptedAnalyzer:
         self._pause(ctx)
         # 가짜 분석은 마스킹 전이라 사연을 그대로 대조 기준으로 쓴다(T14가 마스킹본으로 바꾼다)
         out.masked_narrative = ctx.narrative
-        for e in ctx.evidence:
-            label = DOC_TYPE_LABELS.get(e.doc_type, "서류")
-            rec.step("OCR", f"{e.original_name} 읽기", f"{label}의 글자를 읽었습니다.")
+        # 실제 추출(T13, `AGENT_LLM=claude`)이 이미 step을 남겼으면 흉내 내지 않는다
+        if not out.extractions:
+            for e in ctx.evidence:
+                label = DOC_TYPE_LABELS.get(e.doc_type, "서류")
+                rec.step("OCR", f"{e.original_name} 읽기", f"{label}의 글자를 읽었습니다.")
         rows = {"GOODS": GOODS_ROWS, "UNEXPECTED": UNEXPECTED_ROWS}.get(ctx.inflow_type, ())
         record = _first(ctx, "TRANSACTION_RECORD")
         if record is None:
