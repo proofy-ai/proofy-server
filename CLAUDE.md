@@ -5,7 +5,7 @@ Proofy 서버: 지급정지된 계좌 명의인(청년)이 은행에 낼 이의�
 
 ## 먼저 읽을 문서
 - `docs/contract.md`: FE–BE API 계약 **정본**. 구현과 다르면 구현을 고친다. 계약을 바꿀 때는 이 파일을 먼저 고치고 변경 이력에 적는다
-- `docs/screen-flow.md`: 6개 화면과 사용자 흐름
+- `docs/screen-flow.md`: 화면(흐름 6개 + 체험 계정 선택·내 사건)과 사용자 흐름
 - `docs/agent-design.md`: AI 에이전트 구조와 판단 근거
 - `docs/erd-review.md`: 데이터 모델 결정
 

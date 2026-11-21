@@ -1,7 +1,7 @@
-# Proofy FE–BE API 계약 v0.3
+# Proofy FE–BE API 계약 v0.4
 
 - 작성일: 2026-11-21 · 상태: **BE 결정 반영, FE 확인 후 "합의됨"으로 바꾼다**
-- 화면 기준: `docs/screen-flow.md`(6개 화면) · 데이터 기준: `docs/erd-review.md` · AI 흐름: `docs/agent-design.md`
+- 화면 기준: `docs/screen-flow.md`(흐름 화면 6개 + 체험 계정 선택·내 사건) · 데이터 기준: `docs/erd-review.md` · AI 흐름: `docs/agent-design.md`
 - 서버 실행 중 실제 스키마는 `GET /docs`(FastAPI OpenAPI)에서 확인한다. **이 문서와 OpenAPI가 다르면 이 문서가 정본**이고, 서버를 고친다.
 
 ## 0. 합의 규칙과 일정
@@ -13,10 +13,10 @@
 | 시점 | BE | FE | 같이 |
 |---|---|---|---|
 | 11/21(토) 밤 | 이 문서 확정, `AGENT_LLM=scripted`로 전 엔드포인트 동작(가짜 분석 결과) | 문서 예시 JSON으로 화면 작성 | |
-| 11/22(일) 오후 | 실제 OCR + Claude 연결, 샘플 서류 2세트, 개발 서버 배포 | 개발 서버에 연결 | |
-| 11/22(일) 밤 | | | 시연 시나리오 2건(급여, 물품 거래) 리허설, 소개서 PDF·AI 활용내역 초안 |
+| 11/22(일) 오후 | 실제 OCR + Claude 연결, 샘플 서류 2세트(`GOODS`, `UNEXPECTED`), 개발 서버 배포 | 개발 서버에 연결 | |
+| 11/22(일) 밤 | | | 시연 시나리오 2건(test01 물품 거래, test02 통장 묶기) 리허설, 소개서 PDF·AI 활용내역 초안 |
 | 11/23(월) 12:00 | **계약·기능 동결** | 동결 | |
-| 11/23(월) 15:00 | | | 새 브라우저(로그아웃 상태)에서 "샘플로 체험하기"로 처음부터 끝까지 확인 |
+| 11/23(월) 15:00 | | | 새 브라우저(로그아웃 상태)에서 체험 계정 test01·test02로 처음부터 끝까지 확인 |
 | 11/23(월) 17:00 전 | | | 제출 링크에 소개서 PDF·AI 활용내역·프로토타입 링크 업로드 **+ 같은 자료를 운영사무국 이메일로 발송** |
 
 ## 1. 공통
@@ -27,7 +27,7 @@
 | 형식 | JSON, 필드는 camelCase. 업로드만 `multipart/form-data` |
 | 날짜 | 날짜만: `"2026-11-21"` (한국 날짜). 시각: ISO 8601 UTC `"2026-11-21T06:30:00Z"` |
 | 금액 | 원 단위 정수 `150000` (문자열·소수 금지) |
-| 인증 | 로그인 없음. `POST /cases`(또는 `/cases/sample`) 응답의 `caseToken`을 이후 모든 `/cases/{caseId}/**` 요청에 `X-Case-Token` 헤더로 보낸다 |
+| 인증 | 서버 로그인 없음. 화면의 "로그인"은 체험 계정 버튼일 뿐이고 서버는 계정을 모른다(6절). `POST /cases`(또는 `/cases/sample`) 응답의 `caseToken`을 이후 모든 `/cases/{caseId}/**` 요청에 `X-Case-Token` 헤더로 보낸다 |
 | CORS | 서버가 FE 배포 주소와 `http://localhost:5173`을 허용하고, 허용 헤더에 `Content-Type`, `X-Case-Token`을 넣는다. 추가 주소는 BE에 알려 줄 것 |
 | ID | 전부 UUID 문자열 |
 | 빈 값 | 값이 없으면 키를 빼지 않고 `null` |
@@ -52,7 +52,7 @@
 | HTTP | code | 언제 | FE 처리 |
 |---|---|---|---|
 | 400 | `VALIDATION_ERROR` | 필드 형식·필수값 오류, 미래 날짜. `details.fields`에 `{필드: 사유}` | 해당 입력칸에 표시 |
-| 401 | `CASE_TOKEN_INVALID` | 토큰 없음·불일치 | localStorage 사건 삭제 후 홈으로 |
+| 401 | `CASE_TOKEN_INVALID` | 토큰 없음·불일치 | localStorage 목록에서 그 사건만 지우고 내 사건(또는 홈)으로 |
 | 404 | `CASE_NOT_FOUND` | 사건 없음(삭제·24시간 만료 포함) | 같은 처리 |
 | 404 | `NOT_FOUND` | 증빙·실행 등 하위 자원 없음 | 목록 새로고침 |
 | 409 | `EVIDENCE_LIMIT` | 사건당 증빙 8개 초과 | 안내 |
@@ -63,37 +63,39 @@
 | 415 | `UNSUPPORTED_FILE_TYPE` | JPG·PNG·PDF 외(파일 내용으로 판별) | 안내 |
 | 422 | `ANALYSIS_PRECONDITION` | 사연 20자 미만 또는 거래내역서 없음. `details.missing`에 `NARRATIVE`·`TRANSACTION_RECORD` | 3번 화면에 머물고 빠진 항목 강조 |
 | 429 | `RATE_LIMITED` | 같은 IP에서 사건 생성 시간당 20회 초과, 또는 사건당 분석 시간당 5회 초과 | 안내 |
-| 429 | `DAILY_LIMIT` | 서비스 전체 AI 분석 하루 300회 초과(비용 보호) | "오늘 시연 한도를 다 썼어요" 안내 |
+| 429 | `DAILY_LIMIT` | 서비스 전체 AI 분석 하루 300회 초과(비용 보호). **샘플 사건은 이 오류 대신 미리 만든 결과로 끝난다(4.10)** | "오늘 시연 한도를 다 썼어요" 안내 |
 | 500 | `INTERNAL` | 서버 오류 | 재시도 버튼 |
 
 ## 2. 코드값(enum)
 
 | 이름 | 값 | 화면 표시 |
 |---|---|---|
-| `InflowType` | `SALARY` 급여 · `GOODS` 물품 거래 대금 · `UNEXPECTED` · `OTHER` | P0 화면은 앞의 둘만 선택지로 노출 |
-| `DocType` | `NOTICE` 지급정지 통지서 · `TRANSACTION_RECORD` 거래내역서(입금내역) · `INSURANCE_ELIGIBILITY` 건강보험자격득실확인서 · `EMPLOYMENT_CERT` 재직증명서 · `PAYSLIP` 급여명세서 · `BUSINESS_REG` 사업자등록증명 · `CHAT` 대화내역 · `CONTRACT` 계약서 · `TAX_INVOICE` 세금계산서 · `TRANSACTION_STATEMENT` 거래명세서 · `SHIPPING` 배송 기록 · `OTHER` 기타 | **신분증 값은 없다.** 신분증은 받지 않는다 |
+| `InflowType` | `SALARY` 급여 · `GOODS` 물품 거래 대금 · `UNEXPECTED` 모르는 입금(통장 묶기) · `OTHER` | P0 화면은 앞의 셋을 선택지로 노출 |
+| `DocType` | `NOTICE` 지급정지 통지서 · `TRANSACTION_RECORD` 거래내역서(입금내역) · `INSURANCE_ELIGIBILITY` 건강보험자격득실확인서 · `EMPLOYMENT_CERT` 재직증명서 · `PAYSLIP` 급여명세서 · `BUSINESS_REG` 사업자등록증명 · `CHAT` 대화내역(문자·메신저, 협박 메시지 포함) · `CONTRACT` 계약서 · `TAX_INVOICE` 세금계산서 · `TRANSACTION_STATEMENT` 거래명세서 · `SHIPPING` 배송 기록 · `OTHER` 기타 | **신분증 값은 없다.** 신분증은 받지 않는다 |
 | `CaseStatus` | `DRAFT` 입력 중 · `ANALYZING` 분석 중 · `REVIEW_READY` 결과 있음 · `ERROR` 마지막 분석 실패 | 홈 카드 "현재 단계" |
 | `ExtractStatus` | `UPLOADED` · `PROCESSING` · `READY` · `FAILED` | `FAILED`는 "직접 확인" |
 | `RunStatus` | `RUNNING` · `SUCCEEDED` · `FAILED` | |
 | `Stage` | `EXTRACTING` 글자 읽는 중 · `COMPARING` 거래내역과 대조 중 · `DRAFTING` 초안 작성 중 · `FINISHED` | 4번 화면 단계. **FE는 문구를 하드코딩하지 않고 `stages[].label`을 그대로 표시한다** |
 | `FindingStatus` | `MATCH` 자료와 일치 · `CONFLICT` 자료와 어긋남 · `STATEMENT_ONLY` 진술만 있음 · `UNKNOWN` 확인 못 함 | 탭 A 배지. `MATCH`는 "일치하는 자료가 있다"는 뜻이지 사실 인정·판정이 아님 |
 | `SourceKind` | `EVIDENCE` 올린 서류 · `TRANSACTION` 거래내역서의 거래 행 · `NARRATIVE` 사용자 사연 | |
-| `ChecklistCategory` | `OFFICIAL_REQUIRED` 법령상 제출 서류 · `TYPE_GUIDE` 유형별 안내 서류(기사 근거) · `ANALYSIS_INPUT` AI 분석에 필요한 자료(공식 근거 없음) · `OPTIONAL` 있으면 좋은 자료 · `AI_RECOMMENDED` AI 권장 | 탭 B 묶음 제목. 다섯 묶음을 섞지 않고 따로 보여 줄 것 |
+| `ChecklistCategory` | `OFFICIAL_REQUIRED` 법령상 제출 서류 · `TYPE_GUIDE` 유형별 안내 서류(기사·보도자료 근거) · `ANALYSIS_INPUT` AI 분석에 필요한 자료(공식 근거 없음) · `OPTIONAL` 있으면 좋은 자료 · `AI_RECOMMENDED` AI 권장 | 탭 B 묶음 제목. 다섯 묶음을 섞지 않고 따로 보여 줄 것 |
 | `ChecklistStatus` | `SATISFIED` 올림 · `MISSING` 없음 · `NOT_COLLECTED` 받지 않음(직접 첨부) · `GUIDE_ONLY` 은행에서 작성 | |
 | `NeedsCheckReason` | `CONFLICT` 자료와 어긋난 내용 · `NO_SOURCE` 근거 없음 · `QUOTE_NOT_FOUND` 인용을 원문에서 못 찾음 · `NUMBER_MISMATCH` 숫자가 근거와 다름 · `JUDGMENT_EXPRESSION` 판정처럼 읽히는 표현 · `SOURCE_UNREAD` 근거 서류를 못 읽음 | 탭 C "확인 필요" 툴팁. 여러 사유가 겹치면 이 순서대로 앞의 것 하나만 준다 |
 | `DeadlineState` | `UNKNOWN_NOTICE_DATE` 공고일 확인 필요 · `OK` · `URGENT` 7일 이하 · `EXPIRED` 지남 | D-day 배지 색 |
-| `SampleScenario` | `SALARY` 급여 · `GOODS` 물품 거래(청년 1인 온라인 판매 사업자) | 샘플 체험 |
+| `SampleScenario` | `GOODS` 물품 거래(청년 1인 온라인 판매 사업자, 체험 계정 test01) · `UNEXPECTED` 모르는 입금(통장 묶기, test02) · `SALARY` 급여(P1, 체험 계정 없음) | 샘플 체험 |
 
 ## 3. 화면별 호출
 
 | 화면 | 호출 |
 |---|---|
-| 1 홈 | localStorage에 사건 있으면 `GET /cases/{id}` → 진행 중 카드. **"샘플로 체험하기"**: `POST /cases/sample` → 3번 화면(서류가 채워진 상태)으로 |
+| L 체험 계정 선택(로그인) | 체험 계정 버튼: `POST /cases/sample { scenario }` → 응답을 localStorage 목록 맨 앞에 넣고 3번 화면(서류가 채워진 상태)으로. "직접 해 보기": 2번 화면으로 |
+| 1 홈 | 서버 호출 없음. localStorage 목록이 있으면 "내 사건" 링크를 보여 준다. "샘플로 체험하기"는 L 화면으로 |
+| M 내 사건(마이페이지) | localStorage 목록의 사건마다 `GET /cases/{id}` → 카드(유형·D-day·현재 단계·이어서 하기). 401·404면 목록에서 빼고 "만료된 사건을 정리했어요" 안내. 삭제: `DELETE /cases/{id}` 후 목록에서 제거 |
 | 2 내 상황 | "다음": `POST /cases`(처음) 또는 `PATCH /cases/{id}`(수정). 응답의 `deadline`으로 D-day 표시 |
 | 3 사연·증빙 | `GET /meta/requirements?inflowType=` 또는 `GET /cases/{id}/checklist` · `PATCH /cases/{id}`(사연, 입력 멈춘 뒤 1초 자동 저장) · `POST/DELETE /cases/{id}/evidence` · `GET /samples`(샘플 서류 내려받기 링크) · "분석 시작": `POST /cases/{id}/analysis-runs`에 **현재 사연을 `narrative`로 함께 보낸다**. 사연 20자 미만이거나 `requiredForAnalysis` 항목이 `SATISFIED`가 아니면 버튼을 비활성화하고 이유를 보여 준다(서버도 422로 막는다) |
 | 4 분석 중 | `GET /cases/{id}/analysis-runs/{runId}` 1.5초 간격 폴링 |
-| 5 결과 | `GET /cases/{id}/result` · `PATCH /cases/{id}/checklist/{itemId}` · `PUT /cases/{id}/draft` |
-| 6 제출 가이드 | 서버 호출 없음(정적 문구). 최종 점검 수치는 5번에서 받은 `result.summary`와 `draft.unconfirmedCount` 사용 · "처음부터": `DELETE /cases/{id}` 후 localStorage 삭제 |
+| 5 결과 | `GET /cases/{id}/result` · `PATCH /cases/{id}/checklist/{itemId}` · `PUT /cases/{id}/draft`. **`result.referral`이 있으면 탭 A~C 대신 상담 안내 카드만 보여 주고 6번으로 가는 버튼을 숨긴다(4.11)** |
+| 6 제출 가이드 | 서버 호출 없음(정적 문구). 최종 점검 수치는 5번에서 받은 `result.summary`와 `draft.unconfirmedCount` 사용 · "이 사건 지우기": `DELETE /cases/{id}` 후 localStorage 목록에서 제거 |
 
 ## 4. 엔드포인트
 
@@ -177,10 +179,21 @@
 | `TRADE_DOCUMENT` | 계약서, 세금계산서, 거래명세서 중 하나 | `TYPE_GUIDE` | `CONTRACT`, `TAX_INVOICE`, `TRANSACTION_STATEMENT` | `false` |
 | `DEPOSIT_RECORD` | 문제된 입금이 보이는 거래내역서 | `ANALYSIS_INPUT` | `TRANSACTION_RECORD` | **`true`** |
 
+`UNEXPECTED`(모르는 입금, 통장 묶기)의 유형별 항목은 다음과 같다(공통 항목은 같음). 사기범이 일부러 입금한 뒤 허위 신고로 계좌를 묶고 해제 대가를 요구하는 경우를 전제로 한다.
+
+| code | label | category | acceptedDocTypes | requiredForAnalysis | sourceRef |
+|---|---|---|---|---|---|
+| `THREAT_MESSAGE` | 해제 대가를 요구하는 협박 문자·메시지 | `TYPE_GUIDE` | `CHAT` | `false` | 금융위원회 보도참고 2024.2.1 "통장협박 … 객관적인 자료(예: 협박문자 등)" `https://www.fsc.go.kr/no010101/81640` |
+| `UNKNOWN_DEPOSIT_RECORD` | 모르는 입금이 보이는 거래내역서 | `ANALYSIS_INPUT` | `TRANSACTION_RECORD` | **`true`** | `null` |
+
+- `THREAT_MESSAGE.note`: "협박 문자가 없으면 이의제기가 받아들여지기 어렵다는 보도가 있습니다. 받은 메시지는 지우지 말고 캡처해 두세요." (머니투데이 2025.12.1)
+- 이 유형은 공식 서류 목록을 확인하지 못했다. 그래서 위 두 항목 외에는 AI가 사연을 보고 `AI_RECOMMENDED` 항목(예: 은행·경찰 신고 내역)을 더한다.
+
 - `acceptedDocTypes`가 여러 개면 **그중 하나만 있어도 충족**이다. 업로드 화면에서 항목을 누르면 `acceptedDocTypes`의 첫 값을 기본 `docType`으로 쓰고, 여러 개면 고르게 한다.
-- `requiredForAnalysis: true`는 **AI 분석에 필요한 서류**라는 뜻이고, 법령·기사상 제출 의무와는 별개다. 항목 옆에 "AI 분석에 필요" 배지를 붙인다. 두 유형 모두 거래내역서 한 항목만 `true`다.
+- `requiredForAnalysis: true`는 **AI 분석에 필요한 서류**라는 뜻이고, 법령·기사상 제출 의무와는 별개다. 항목 옆에 "AI 분석에 필요" 배지를 붙인다. 모든 유형에서 거래내역서 한 항목만 `true`다.
   - 급여: `SALARY_DEPOSIT`. 기사가 든 서류와 같아서 `TYPE_GUIDE` 묶음에 있다.
   - 물품 거래: `DEPOSIT_RECORD`. 기사 근거가 없어서 `ANALYSIS_INPUT` 묶음에 있다.
+  - 모르는 입금: `UNKNOWN_DEPOSIT_RECORD`. 같은 이유로 `ANALYSIS_INPUT` 묶음에 있다.
 
 ### 4.3 `POST /cases` — 사건 만들기 (화면 2 "다음")
 
@@ -224,12 +237,13 @@
 { "scenario": "GOODS" }
 ```
 
-응답 `201`: `POST /cases`와 같은 모양. `case.isSample: true`, 사연·입금 정보·날짜(공고일 = 오늘 − 4일 등 오늘 기준 상대 날짜)·증빙이 채워져 있다. FE는 3번 화면으로 보내고, 사용자는 바로 "분석 시작"을 누를 수 있다. 생성 제한은 4.3과 같다.
+응답 `201`: `POST /cases`와 같은 모양. `case.isSample: true`, `case.sampleScenario`에 시나리오 값, 사연·입금 정보·날짜(공고일 = 오늘 − 4일 등 오늘 기준 상대 날짜)·증빙이 채워져 있다. FE는 3번 화면으로 보내고, 사용자는 바로 "분석 시작"을 누를 수 있다. 버튼을 누를 때마다 새 사건이 생기므로 여러 심사위원이 같은 체험 계정을 눌러도 서로 섞이지 않는다. 생성 제한은 4.3과 같다.
 
-| 시나리오 | 들어 있는 합성 서류 | 대조에서 보이는 것 |
-|---|---|---|
-| `SALARY` | 급여 입금이 보이는 거래내역서(텍스트 PDF), 재직증명서(PNG) | 입금 금액·날짜 일치, 근무 사실 근거 |
-| `GOODS` | 거래내역서(텍스트 PDF), 거래처와의 대화내역(PNG), 사업자등록증명(PNG) | 입금 일치, 대화 속 합의 금액과 입금액 **불일치**(탭 A 경고와 탭 C "확인 필요" 시연), 거래명세서 없음(탭 B) |
+| 시나리오 | 체험 계정 | 들어 있는 합성 서류 | 대조에서 보이는 것 |
+|---|---|---|---|
+| `GOODS` | test01 | 거래내역서(텍스트 PDF), 거래처와의 대화내역(PNG), 사업자등록증명(PNG) | 입금 일치, 대화 속 합의 금액과 입금액 **불일치**(탭 A `AMOUNT` 경고와 탭 C "확인 필요"), 거래명세서 없음(탭 B) |
+| `UNEXPECTED` | test02 | 모르는 사람의 입금 10만 원이 보이는 거래내역서(텍스트 PDF), "20만 원 보내면 신고 취하해 줄게" 협박 문자(PNG) | 입금 금액 일치, 입금 뒤 그 돈이 빠져나가지 않음(거래내역 조회), 사연의 입금 날짜와 거래내역 날짜 **불일치**(탭 A `DATE` 경고), "바로 은행에 알렸다"는 진술만 있음(탭 B AI 권장: 신고 내역) |
+| `SALARY` | 없음(P1, 시간이 남으면) | 급여 입금이 보이는 거래내역서(텍스트 PDF), 재직증명서(PNG) | 입금 금액·날짜 일치, 근무 사실 근거 |
 
 #### `GET /samples` — 샘플 서류 내려받기
 
@@ -257,6 +271,7 @@
     "caseId": "6f1d2c1e-…",
     "status": "DRAFT",
     "isSample": false,
+    "sampleScenario": null,
     "noticeReceivedDate": "2026-11-10",
     "publicNoticeDate": "2026-11-17",
     "inflow": { "type": "GOODS", "amountKrw": 150000, "occurredAt": null },
@@ -388,6 +403,7 @@
 - 이미 실행 중 → `409 ANALYSIS_IN_PROGRESS` (`details.runId`)
 - 사용자가 고친 초안이 있고 `overwriteEditedDraft=false` → `409 DRAFT_HAS_EDITS`
 - 사건당 시간당 5회 → `429 RATE_LIMITED`, 서비스 전체 하루 300회 → `429 DAILY_LIMIT`
+- **상담 안내 검사:** 사전 조건을 통과하면 서버가 사연을 정해 둔 표현 목록(통장·계좌·체크카드 대여·양도, 비밀번호 전달, 환전·구매대행·송금 알바, 현금 인출 후 전달 등)으로 검사한다. 걸리면 AI를 부르지 않고 실행을 바로 `SUCCEEDED`로 끝내며, 결과에 `referral`을 넣고 초안은 만들지 않는다(4.11). 이 검사는 하루 한도에 세지 않는다
 
 응답 `202`
 
@@ -421,8 +437,9 @@ FE는 1.5초마다 부르고 `status`가 `RUNNING`이 아니면 멈춘다. 180�
 ```
 
 - `stages[].status`: `PENDING` · `RUNNING` · `DONE` · `FAILED`
-- `steps`는 AI가 실제로 한 일을 보여 주는 기록이다. 화면에 다 보여 줄 필요는 없지만, 마지막 몇 줄을 흐리게 보여 주면 "AI가 무엇을 하는지" 시연에 좋다. `type`: `OCR` · `TOOL_CALL` · `FINDING` · `CONFLICT` · `DRAFT` · `VERIFY` · `FAILED`
+- `steps`는 AI가 실제로 한 일을 보여 주는 기록이다. 화면에 다 보여 줄 필요는 없지만, 마지막 몇 줄을 흐리게 보여 주면 "AI가 무엇을 하는지" 시연에 좋다. `type`: `OCR` · `TOOL_CALL` · `FINDING` · `CONFLICT` · `DRAFT` · `VERIFY` · `FALLBACK` · `SAFETY` · `FAILED`
 - 서류 하나를 못 읽어도 분석은 계속된다(그 단계만 `FAILED`).
+- **샘플 사건 대체 결과:** `isSample: true`이고 사연·서류를 샘플 그대로 둔 사건(`inputVersion`이 생성 때와 같음)에서 AI 호출이 실패하거나 하루 한도(`DAILY_LIMIT`)를 넘으면, 서버는 실패로 끝내지 않고 그 시나리오용으로 미리 만든 결과로 `SUCCEEDED` 처리한다. 이때 `steps`에 `{ "type": "FALLBACK", "title": "미리 만든 결과 사용", "summary": "지금은 AI 분석을 쓸 수 없어 샘플용으로 미리 만든 결과를 보여 드립니다." }`를 남기고, 결과의 `precomputed`가 `true`가 된다(4.11). 사용자가 사연이나 서류를 바꾼 샘플 사건은 일반 사건처럼 실패·429를 받는다.
 - 실패 시 `status: "FAILED"`, `error: { "code": "AGENT_FAILED" | "AGENT_TIMEOUT" | "AGENT_REFUSED", "message": "…" }`. FE는 메시지와 "다시 시도"(4.9 재호출)를 보여 준다.
 
 ### 4.11 결과 — `GET /cases/{caseId}/result`
@@ -435,6 +452,8 @@ FE는 1.5초마다 부르고 `status`가 `RUNNING`이 아니면 멈춘다. 180�
   "basedOnInputVersion": 4,
   "isStale": false,
   "generatedAt": "2026-11-21T06:45:41Z",
+  "precomputed": false,
+  "referral": null,
   "aiNotice": "AI가 올린 자료를 정리한 결과입니다. 해제 여부를 판단하지 않으며, 은행 심사 결과와 다를 수 있습니다.",
   "deadline": { "...": "4.4와 같음" },
   "findings": [
@@ -501,6 +520,22 @@ FE는 1.5초마다 부르고 `status`가 `RUNNING`이 아니면 멈춘다. 180�
 ```
 
 - `isStale: true` = 분석 뒤에 사연·서류가 바뀌었다. 결과 상단에 "자료가 바뀌었어요. 다시 분석하기" 배너.
+- `referral`: 보통은 `null`. 4.9의 상담 안내 검사에 걸리면 아래 모양이고, 이때 `findings: []`, `draft: null`, `summary`는 모두 0이며 `GET /cases/{id}/draft`는 `404 NOT_FOUND`다. 체크리스트는 평소처럼 준다.
+
+```json
+"referral": {
+  "code": "LEGAL_CONSULT",
+  "matchedPhrases": ["통장을 빌려"],
+  "message": "사연에 통장을 빌려주거나 남의 돈을 대신 보낸 것으로 보이는 표현이 있어 소명서 초안을 만들지 않았습니다. 이런 경우에는 이의제기 전에 법률 상담을 먼저 받으세요.",
+  "contacts": [
+    { "name": "대한법률구조공단", "phone": "132" },
+    { "name": "금융감독원", "phone": "1332" }
+  ]
+}
+```
+
+  - 이 안내는 사람이나 사건을 판정하는 것이 아니라 정해 둔 표현이 있는지만 본다. `matchedPhrases`를 화면에 그대로 보여 준다. 잘못 걸렸으면 사용자가 사연을 고쳐 다시 분석할 수 있다.
+- `precomputed: true` = 이번에 AI가 분석한 결과가 아니라 샘플용으로 미리 만든 결과다(4.10). 결과 상단에 "지금은 AI 분석을 쓸 수 없어 미리 만든 샘플 결과를 보여 드려요" 배너를 `aiNotice`와 함께 보여 준다.
 - `conflict.field`: `AMOUNT` · `DATE` · `COUNTERPARTY` · `OTHER`. 탭 A의 경고 문구에 `statement`(사용자 진술)와 `found`(자료)를 나란히 보여 준다.
 - `verified: false`인 근거는 "원문에서 찾지 못한 인용"으로 흐리게 표시한다.
 - `counterparty` 등 사람 이름·계좌번호는 서버가 가린 값으로 준다.
@@ -589,17 +624,24 @@ FE는 1.5초마다 부르고 `status`가 `RUNNING`이 아니면 멈춘다. 180�
 
 | 항목 | 규칙 |
 |---|---|
-| localStorage | 키 `proofy.case` = `{ "caseId", "caseToken", "createdAt" }` 한 건만. 401·404를 받으면 지운다 |
+| localStorage | 키 `proofy.cases` = `[{ "caseId", "caseToken", "createdAt", "sampleScenario" }]` 배열, 최신이 앞. 최대 10건(넘으면 가장 오래된 것부터 뺀다). 401·404를 받은 사건만 목록에서 지운다. 읽기·쓰기는 try/catch로 감싸고 실패하면 빈 목록으로 본다 |
+| 체험 계정(로그인 화면) | 아이디·비밀번호 입력 없이 버튼만 둔다. 서버는 계정을 모르고, 버튼은 아래 시나리오로 `POST /cases/sample`을 부를 뿐이다. 이름·연락처는 받지 않고 고정 가상 프로필만 보여 준다. "내 사건"은 이 브라우저의 localStorage 목록이라 계정과 무관하다 |
 | 화면 2 입력 중 상태 | 서버에 보내기 전까지 FE 상태로만 둔다 |
 | 별지 제4호서식 인적사항(이름, 생년월일, 주소, 연락처, 계좌번호) | **서버로 보내지 않는다.** 6번 화면 "PDF로 저장"에서 FE가 입력받아 인쇄용 화면에만 채우고 `window.print()` |
 | 합성 데이터 안내 | 홈: "시연용 서비스이며 예시는 합성 데이터입니다". 3번 업로드 영역: `demoMode`이면 "실제 서류 대신 샘플(합성) 서류만 올려 주세요" + [샘플 서류 받기] |
 | 복사·PDF 저장 확인창 | 4.12 화면 규칙 |
+| 체험 계정 목록 | 아래 표 |
+
+| 버튼 | 가상 프로필(화면 표시용) | `scenario` |
+|---|---|---|
+| test01 | 온라인으로 가죽 소품을 파는 1인 사업자(가상) · "물건값으로 받은 돈 때문에 계좌가 묶였어요" | `GOODS` |
+| test02 | 사회초년생(가상) · "모르는 돈이 들어온 뒤 계좌가 묶였어요(통장 묶기)" | `UNEXPECTED` |
 | 정적 문구 | 홈 소개, 절차 타임라인, 제출 가이드(낼 서류 3종, 심사 5영업일, 보완 요구 시 기한 안 재제출), 거짓 이의제기 처벌 경고 |
 | AI 표시 | 결과 화면 상단에 `result.aiNotice`를 항상 보여 준다(해커톤 AI 활용 기준 제7조 권장) |
 
 ## 7. 가짜 분석 모드
 
-서버를 `AGENT_LLM=scripted`로 띄우면 Claude를 부르지 않고 정해진 규칙으로 결과를 만든다. 단계마다 1~2초씩 쉬어서 4번 화면 진행 표시가 보인다. 응답 모양은 실제와 같다(샘플 시나리오 2건은 4.11 예시와 같은 결과를 낸다). FE 개발·리허설은 이 모드로 하고, `GET /health`의 `agent` 값으로 어느 모드인지 확인한다.
+서버를 `AGENT_LLM=scripted`로 띄우면 Claude를 부르지 않고 정해진 규칙으로 결과를 만든다. 단계마다 1~2초씩 쉬어서 4번 화면 진행 표시가 보인다. 응답 모양은 실제와 같다(`GOODS` 샘플은 4.11 예시와 같은 결과를 낸다). 4.10의 "미리 만든 결과"는 이 모드가 각 샘플 시나리오에 내는 결과와 같은 것을 쓴다. FE 개발·리허설은 이 모드로 하고, `GET /health`의 `agent` 값으로 어느 모드인지 확인한다.
 
 ## 8. 아직 안 정한 것
 
@@ -607,7 +649,7 @@ FE는 1.5초마다 부르고 `status`가 `RUNNING`이 아니면 멈춘다. 180�
 |---|---|
 | 개발 서버 주소, FE 배포 주소 | BE가 배포 후 공유. FE 주소는 CORS 등록을 위해 BE에 알려 줌 |
 | 재분석 시 탭 B의 사용자 체크(`checked`) 유지 | 같은 `code`인 공식·유형 항목은 유지, AI 권장 항목은 새로 만듦 |
-| 홈 "진행 중인 건" 카드 | 시간 부족 시 제외(화면 문서 범위 결정과 같음). API는 이미 있음. **"샘플로 체험하기" 버튼은 제외하지 않는다** |
+| M 내 사건(마이페이지) | 시간 부족 시 제외(화면 문서 범위 결정과 같음). API는 이미 있음. **L 체험 계정 선택은 제외하지 않는다** |
 
 ## 변경 이력
 
@@ -616,3 +658,4 @@ FE는 1.5초마다 부르고 `status`가 `RUNNING`이 아니면 멈춘다. 180�
 | 2026-11-21 | 0.1 | 최초 작성 |
 | 2026-11-21 | 0.2 | ① 사건은 화면 2 "다음"에서 생성 확정(사연은 화면 3에서 `PATCH`) ② `COMPARING` 문구를 "거래내역과 대조 중"으로, FE는 `stages[].label`만 표시 ③ 요구 서류에 `requiredForAnalysis` 추가, 거래내역서를 분석 시작 조건으로(`422`의 `details.missing`) |
 | 2026-11-21 | 0.3 | 외부 검토 반영. ① 초안: `CONFLICT` 연결 문장 자동 확인 필요, 진술 값 일치 시 서버가 연결, `warnings`, 문장별 `confirmed`·`unconfirmedCount`, 복사·PDF 전 확인창 ② 개인정보 보장 항목·`demoMode`·합성 데이터 안내 ③ `POST /cases/sample`, `GET /samples` 샘플 체험 ④ 일정에 리허설·소개서·제출(업로드+이메일) ⑤ `ANALYSIS_INPUT` 분류 신설, 물품 거래는 사업자 판매 대금 전제·예시를 청년 1인 판매 사업자로 ⑥ IP당 사건 생성 제한, `DAILY_LIMIT` ⑦ 미래 날짜 400 ⑧ 분석 시작에 `narrative` 동봉 ⑨ CORS 허용 헤더 |
+| 2026-11-21 | 0.4 | 체험 계정·마이페이지. ① L 체험 계정 선택(test01 `GOODS`, test02 `UNEXPECTED`), M 내 사건 화면 추가, 서버 인증은 그대로 ② localStorage `proofy.case` 한 건 → `proofy.cases` 배열 ③ `UNEXPECTED` 화면 노출, 유형별 항목(`THREAT_MESSAGE`, `UNKNOWN_DEPOSIT_RECORD`), 샘플 시나리오 추가, `SALARY` 샘플은 P1 ④ `case.sampleScenario` 추가 ⑤ 샘플 사건은 AI 실패·하루 한도 초과 때 미리 만든 결과로 끝남(`result.precomputed`, step `FALLBACK`) ⑥ 상담 안내 검사: 통장 대여·송금 대행 표현이 사연에 있으면 초안 대신 `result.referral`(step `SAFETY`) |

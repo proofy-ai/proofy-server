@@ -67,9 +67,9 @@ ERD는 `narrative NOT NULL` 때문에 화면 3 완료 시점에 사건을 만들
 
 | 테이블 | 추가 | 이유 |
 |---|---|---|
-| `cases` | `access_token_hash`, `expires_at`, `is_sample`, `created_ip_hash` | 2.2, 자동 삭제, 샘플 체험(계약 4.3.1), IP당 생성 제한 |
+| `cases` | `access_token_hash`, `expires_at`, `is_sample`, `sample_scenario`, `sample_input_version`, `created_ip_hash` | 2.2, 자동 삭제, 샘플 체험(계약 4.3.1), 샘플을 그대로 둔 사건인지 판별(계약 4.10 미리 만든 결과), IP당 생성 제한 |
 | `evidence` | `is_sample` | 샘플 사건의 합성 서류 표시 |
-| `analysis_runs` | `model`, `prompt_version`, `input_tokens`, `output_tokens`, `cost_micro_usd`, `steps_json` | 비용 근거(심사 "비용·운영 부담"), 4번 화면 진행 기록 |
+| `analysis_runs` | `model`, `prompt_version`, `input_tokens`, `output_tokens`, `cost_micro_usd`, `steps_json`, `precomputed` | 비용 근거(심사 "비용·운영 부담"), 4번 화면 진행 기록, 미리 만든 결과 표시(계약 4.11) |
 | `evidence` | `low_confidence_regions`, `masked_text` | OCR 신뢰도 표시, AI에는 마스킹본만 전달 |
 | `claim_findings` | `conflict_detail`(기대값/실제값) | 탭 A "어긋나는 부분 경고" |
 
@@ -80,7 +80,7 @@ ERD는 `narrative NOT NULL` 때문에 화면 3 완료 시점에 사건을 만들
 - **상태 이름 통일.** ERD `DOCUMENT_MATCH/CONFLICT/USER_STATEMENT/UNKNOWN`, 프로토타입 HTML `MATCH/STATEMENT/UNKNOWN`. → `MATCH / CONFLICT / STATEMENT_ONLY / UNKNOWN`으로 통일(계약서 기준).
 - **기한 계산 규칙을 적어 둘 것.** "달력상 2개월"만으로는 구현자마다 달라진다. 민법 기간 계산(초일 불산입, 말일 응당일 없으면 그 달 말일)을 따르고, 공휴일 순연은 P0에서 하지 않되 "은행 확인" 문구로 보완. 계약서 5절에 적었다.
 - **증빙 개수 상한 5개는 빠듯하다.** 물품 거래는 통지서 + 사업자등록 + 대화내역 + 계약 서류 + 거래내역서 = 5개라 여유가 없다. 8개 제안.
-- **사건 유형 확장값**(`UNEXPECTED`, `OTHER`)은 데이터 모델에 두되 FE 선택지는 `SALARY`, `GOODS`만. 동의.
+- **사건 유형 확장값**(`UNEXPECTED`, `OTHER`)은 데이터 모델에 두되 FE 선택지는 `SALARY`, `GOODS`만. 동의. → 11/21 계약 v0.4에서 `UNEXPECTED`도 FE 선택지에 넣음(체험 계정 test02)
 - **`cases.status`는 4개로 충분**: `DRAFT`(입력 중) → `ANALYZING` → `REVIEW_READY` / `ERROR`. 홈 카드의 "현재 단계"는 이 값과 FE 라우트로 표현.
 - **DBMS**: 로컬 SQLite, 배포 Postgres. JSON 컬럼은 SQLAlchemy `JSON` 타입이면 둘 다 동작.
 
