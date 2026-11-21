@@ -20,7 +20,7 @@
 
 ## 구현 계획
 
-> FE 합의(계약 v0.4 확인) 전에 작성한 계획이다. 구현은 FE 답을 받은 뒤 또는 사용자가 먼저 가기로 정한 뒤 시작한다.
+> 계약 v0.6·ERD v1.1(PR #32) 기준으로 맞춘 계획이다. PATCH의 `inputVersion` 규칙(값이 실제로 바뀔 때만)은 v0.6과 같다.
 
 ### 파일
 
@@ -35,10 +35,10 @@
 
 ### 테이블
 
-- `cases`: `id`(UUID 문자열), `access_token_hash`(SHA-256 hex), `status`(기본 `DRAFT`), `is_sample`, `sample_scenario`, `sample_input_version`, `notice_received_date`, `public_notice_date`(NULL 허용), `has_prior_freeze`(NULL 허용), `narrative`(NULL 허용, 최대 2000자), `input_version`(기본 1), `created_ip_hash`, `created_at`, `updated_at`, `expires_at`(생성 + 24시간)
+- `cases`: `id`(UUID 문자열), `access_token_hash`(SHA-256 hex), `status`(기본 `DRAFT`), `is_sample`, `sample_scenario`, `sample_input_version`, `notice_received_date`, `public_notice_date`(NULL 허용), `has_prior_freeze`(NULL 허용), `narrative`(NULL 허용, 최대 2000자), `input_version`(기본 1), `created_at`, `updated_at`, `expires_at`(생성 + 24시간)
 - `case_inflows`: `id`, `case_id`(FK UNIQUE, 사건 삭제 시 함께 삭제), `inflow_type`, `reported_amount_krw`(BigInteger, 사용자 **진술** 금액, API는 `inflow.amountKrw`), `occurred_at`(DATE, NULL 허용), `created_at`
 - 컬럼 정본은 `docs/erd.md` 3.1·3.2
-- 샘플·IP 컬럼(`is_sample`, `sample_*`, `created_ip_hash`)은 T06·T11에서 쓰지만 지금 같이 만든다. 마이그레이션 도구가 없어서 나중에 컬럼을 더하면 로컬 DB를 지워야 하기 때문이다
+- 샘플 컬럼(`is_sample`, `sample_*`)은 T06에서 쓰지만 지금 같이 만든다. 마이그레이션 도구가 없어서 나중에 컬럼을 더하면 로컬 DB를 지워야 하기 때문이다. IP 해시는 ERD v1.1에서 `cases`가 아니라 `usage_events`(T11)로 옮겼다
 
 ### 동작
 
