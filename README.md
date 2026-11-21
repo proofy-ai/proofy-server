@@ -28,6 +28,17 @@ uv run ruff check .
 
 테스트는 API 키 없이 가짜 분석 모드(`AGENT_LLM=scripted`)로 돕니다. PR마다 GitHub Actions가 같은 명령을 실행합니다.
 
+## 체험 계정 합성 서류
+
+`app/samples/`의 서류(거래내역서 PDF, 대화·협박 문자·사업자등록증명 PNG)는 모두 지어낸 인물·번호·기관으로 만든 **합성 데이터**이고, 서류마다 그렇게 표시되어 있습니다. 스크립트로 만들어 결과 파일을 커밋했습니다. 거래 행과 인용 문구는 가짜 분석기(`app/agent/scripted.py`)의 값과 같습니다.
+
+```bash
+uv run python -m scripts.make_samples                       # Windows 기본 글꼴 경로
+uv run python -m scripts.make_samples --font NotoSansKR.ttf # 다른 경로
+```
+
+글꼴은 [Noto Sans KR](https://fonts.google.com/noto/specimen/Noto+Sans+KR)(SIL Open Font License 1.1)이며 레포에는 넣지 않았습니다. PDF에는 쓴 글자만 들어갑니다.
+
 ## Windows에서 실행이 막힐 때
 
 스마트 앱 컨트롤 같은 애플리케이션 제어 정책이 켜진 PC에서는 다음 두 가지가 막힐 수 있습니다.
