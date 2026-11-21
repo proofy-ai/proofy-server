@@ -5,10 +5,9 @@ from typing import Literal
 
 from pydantic import Field, StrictBool, StrictInt
 
-from app.schemas.common import CamelModel, UtcDatetime
+from app.schemas.common import CamelModel, InflowType, UtcDatetime
 from app.schemas.deadline import Deadline
 
-InflowType = Literal["SALARY", "GOODS", "UNEXPECTED", "OTHER"]
 SampleScenario = Literal["GOODS", "UNEXPECTED", "SALARY"]
 CaseStatus = Literal["DRAFT", "ANALYZING", "REVIEW_READY", "ERROR"]
 

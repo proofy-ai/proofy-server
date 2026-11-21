@@ -1,4 +1,4 @@
-# Proofy FE–BE API 계약 v0.6.1
+# Proofy FE–BE API 계약 v0.6.2
 
 - 작성일: 2026-11-21 · 상태: **BE 결정 반영, FE 확인 후 "합의됨"으로 바꾼다**
 - 화면 기준: `docs/screen-flow.md`(흐름 화면 6개 + 체험 계정 선택·내 사건) · 데이터 기준: `docs/erd.md` · AI 흐름: `docs/agent-design.md`
@@ -201,6 +201,8 @@
   - 급여: `SALARY_DEPOSIT`. 기사가 든 서류와 같아서 `TYPE_GUIDE` 묶음에 있다.
   - 물품 거래: `DEPOSIT_RECORD`. 기사 근거가 없어서 `ANALYSIS_INPUT` 묶음에 있다.
   - 모르는 입금: `UNKNOWN_DEPOSIT_RECORD`. 같은 이유로 `ANALYSIS_INPUT` 묶음에 있다.
+- `OTHER`(화면에 없는 값)는 공통 항목(`OBJECTION_FORM`, `ID_COPY`, `NOTICE`)과 `DEPOSIT_RECORD`(거래내역서, `ANALYSIS_INPUT`, `requiredForAnalysis: true`)만 준다. 분석 시작 조건이 모든 유형에 거래내역서를 요구하기 때문이다.
+- 이 절에 문구가 없는 항목의 `note`는 `null`이다. 고정 항목은 어느 사건에나 맞는 내용만 담고, 사건 상황에 맞춘 안내는 분석 후 `AI_RECOMMENDED` 항목과 탭 A의 어긋남 경고가 맡는다.
 
 ### 4.3 `POST /cases` — 사건 만들기 (화면 2 "다음")
 
@@ -373,7 +375,7 @@
       "requiredForAnalysis": false,
       "satisfiedBy": [],
       "checked": false,
-      "note": "거래명세서가 있으면 대화 속 금액과 입금액이 다른 이유를 설명하는 데 도움이 됩니다.",
+      "note": null,
       "sourceRef": { "label": "한국일보 2026.5.3", "url": "https://www.hankookilbo.com/news/article/A2026050313580002729" }
     },
     {
@@ -674,6 +676,7 @@ FE는 1.5초마다 부르고 `status`가 `RUNNING`이 아니면 멈춘다. 180�
 | 2026-11-21 | 0.2 | ① 사건은 화면 2 "다음"에서 생성 확정(사연은 화면 3에서 `PATCH`) ② `COMPARING` 문구를 "거래내역과 대조 중"으로, FE는 `stages[].label`만 표시 ③ 요구 서류에 `requiredForAnalysis` 추가, 거래내역서를 분석 시작 조건으로(`422`의 `details.missing`) |
 | 2026-11-21 | 0.3 | 외부 검토 반영. ① 초안: `CONFLICT` 연결 문장 자동 확인 필요, 진술 값 일치 시 서버가 연결, `warnings`, 문장별 `confirmed`·`unconfirmedCount`, 복사·PDF 전 확인창 ② 개인정보 보장 항목·`demoMode`·합성 데이터 안내 ③ `POST /cases/sample`, `GET /samples` 샘플 체험 ④ 일정에 리허설·소개서·제출(업로드+이메일) ⑤ `ANALYSIS_INPUT` 분류 신설, 물품 거래는 사업자 판매 대금 전제·예시를 청년 1인 판매 사업자로 ⑥ IP당 사건 생성 제한, `DAILY_LIMIT` ⑦ 미래 날짜 400 ⑧ 분석 시작에 `narrative` 동봉 ⑨ CORS 허용 헤더 |
 | 2026-11-21 | 0.4 | 체험 계정·마이페이지. ① L 체험 계정 선택(test01 `GOODS`, test02 `UNEXPECTED`), M 내 사건 화면 추가, 서버 인증은 그대로 ② localStorage `proofy.case` 한 건 → `proofy.cases` 배열 ③ `UNEXPECTED` 화면 노출, 유형별 항목(`THREAT_MESSAGE`, `UNKNOWN_DEPOSIT_RECORD`), 샘플 시나리오 추가, `SALARY` 샘플은 P1 ④ `case.sampleScenario` 추가 ⑤ 샘플 사건은 AI 실패·하루 한도 초과 때 미리 만든 결과로 끝남(`result.precomputed`, step `FALLBACK`) ⑥ 상담 안내 검사: 통장 대여·송금 대행 표현이 사연에 있으면 초안 대신 `result.referral`(step `SAFETY`) |
+| 2026-11-21 | 0.6.2 | ① 4.2에 `OTHER` 유형 목록과 "문구가 없는 항목의 `note`는 `null`" 규칙 ② 4.8 예시의 `TRADE_DOCUMENT.note`를 `null`로(사건별 문구는 AI 권장 항목·탭 A가 맡음). 서버 응답 모양 변경 없음 |
 | 2026-11-21 | 0.6.1 | FE 코드에 맞춤(서버 동작 변경 없음). ① 로컬 BE 주소 `http://localhost:8080` ② 6절에 FE 전용 화면 설정(`setting-storage`)과 헤더 "내 사건" 버튼 |
 | 2026-11-21 | 0.6 | FE 수정 요청 반영(`docs/erd.md` v1.1). ① 한도·비용을 사건과 분리한 사용량 기록으로 셈(사건 삭제로 줄지 않음), 한도 숫자는 서버 환경변수 ② `GET /health`에 `dailyUsage` 추가 ③ 인용 검증은 마스킹한 글(서류·사연) 기준, 사연도 마스킹해서 AI에 보냄 ④ `PATCH`와 분석 시작의 `narrative`는 값이 실제로 바뀔 때만 `inputVersion` +1 ⑤ 다시 분석해 상담 안내로 끝나면 이전 초안 삭제(`GET /draft` 404) ⑥ 결과·근거 거래·AI 권장 항목·초안은 가장 최근 성공 실행 것만 ⑦ CORS는 FE 고정 도메인만(미리보기 제외). **필드 추가와 동작 명시뿐이라 v0.4·v0.5 FE가 그대로 동작한다** |
 | 2026-11-21 | 0.5 | AI 에이전트 계획 반영(`docs/agent-design.md`). ① 초안 문장에 `section`(`DraftSection`: 입금 경위·가담하지 않았다는 설명·피해 경위), `fullText`는 묶음 사이 빈 줄 ② `UNEXPECTED`에 피해 신고 기록 항목 `INCIDENT_REPORT`(`OPTIONAL`, 서류 종류는 기존 `OTHER`). **모두 필드·항목 추가라 v0.4 FE가 그대로 동작한다** ③ `TOOL_CALL` step `summary`에 AI가 밝힌 조회 이유, `VERIFY` step 설명 |

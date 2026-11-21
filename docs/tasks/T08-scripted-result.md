@@ -9,6 +9,7 @@
 - `GET /cases/{id}/result`(계약 4.11), `isStale`, `summary`
 - scripted 결과에도 초안 `section`과 `TOOL_CALL` 조회 이유(`summary`)를 넣는다(계약 v0.5, `docs/agent-design.md` 2.4·2.5)
 - 결과·근거 거래·AI 권장 체크리스트 항목은 가장 최근 성공 실행 것만(계약 v0.6 4.8·4.11)
+- AI 권장 항목은 고정 목록(계약 4.2)에 이미 있는 `docType`만 받는 항목이면 코드가 거른다(같은 서류가 두 번 나오지 않게)
 
 ## 제외
 
