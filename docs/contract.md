@@ -1,4 +1,4 @@
-# Proofy FE–BE API 계약 v0.4
+# Proofy FE–BE API 계약 v0.5
 
 - 작성일: 2026-11-21 · 상태: **BE 결정 반영, FE 확인 후 "합의됨"으로 바꾼다**
 - 화면 기준: `docs/screen-flow.md`(흐름 화면 6개 + 체험 계정 선택·내 사건) · 데이터 기준: `docs/erd.md` · AI 흐름: `docs/agent-design.md`
@@ -80,6 +80,7 @@
 | `SourceKind` | `EVIDENCE` 올린 서류 · `TRANSACTION` 거래내역서의 거래 행 · `NARRATIVE` 사용자 사연 | |
 | `ChecklistCategory` | `OFFICIAL_REQUIRED` 법령상 제출 서류 · `TYPE_GUIDE` 유형별 안내 서류(기사·보도자료 근거) · `ANALYSIS_INPUT` AI 분석에 필요한 자료(공식 근거 없음) · `OPTIONAL` 있으면 좋은 자료 · `AI_RECOMMENDED` AI 권장 | 탭 B 묶음 제목. 다섯 묶음을 섞지 않고 따로 보여 줄 것 |
 | `ChecklistStatus` | `SATISFIED` 올림 · `MISSING` 없음 · `NOT_COLLECTED` 받지 않음(직접 첨부) · `GUIDE_ONLY` 은행에서 작성 | |
+| `DraftSection` | `DEPOSIT_REASON` 입금 경위 · `NO_INVOLVEMENT` 범죄에 가담하지 않았다는 설명 · `VICTIM_CONTEXT` 피해를 입은 경위 | 탭 C 초안의 묶음 제목. 소명 자료 3분류를 따른다(`docs/agent-design.md` 1절) |
 | `NeedsCheckReason` | `CONFLICT` 자료와 어긋난 내용 · `NO_SOURCE` 근거 없음 · `QUOTE_NOT_FOUND` 인용을 원문에서 못 찾음 · `NUMBER_MISMATCH` 숫자가 근거와 다름 · `JUDGMENT_EXPRESSION` 판정처럼 읽히는 표현 · `SOURCE_UNREAD` 근거 서류를 못 읽음 | 탭 C "확인 필요" 툴팁. 여러 사유가 겹치면 이 순서대로 앞의 것 하나만 준다 |
 | `DeadlineState` | `UNKNOWN_NOTICE_DATE` 공고일 확인 필요 · `OK` · `URGENT` 7일 이하 · `EXPIRED` 지남 | D-day 배지 색 |
 | `SampleScenario` | `GOODS` 물품 거래(청년 1인 온라인 판매 사업자, 체험 계정 test01) · `UNEXPECTED` 모르는 입금(통장 묶기, test02) · `SALARY` 급여(P1, 체험 계정 없음) | 샘플 체험 |
@@ -185,9 +186,12 @@
 |---|---|---|---|---|---|
 | `THREAT_MESSAGE` | 해제 대가를 요구하는 협박 문자·메시지 | `TYPE_GUIDE` | `CHAT` | `false` | 금융위원회 보도참고 2024.2.1 "통장협박 … 객관적인 자료(예: 협박문자 등)" `https://www.fsc.go.kr/no010101/81640` |
 | `UNKNOWN_DEPOSIT_RECORD` | 모르는 입금이 보이는 거래내역서 | `ANALYSIS_INPUT` | `TRANSACTION_RECORD` | **`true`** | `null` |
+| `INCIDENT_REPORT` | 경찰·은행에 신고한 기록(사건사고사실확인원, 신고 접수증 등) | `OPTIONAL` | `OTHER` | `false` | 법률사무소 안내 글(공식 자료 아님) `https://www.yglaw.co.kr/bbs/board.php?bo_table=lawinfo&wr_id=27` |
 
 - `THREAT_MESSAGE.note`: "협박 문자가 없으면 이의제기가 받아들여지기 어렵다는 보도가 있습니다. 받은 메시지는 지우지 말고 캡처해 두세요." (머니투데이 2025.12.1)
-- 이 유형은 공식 서류 목록을 확인하지 못했다. 그래서 위 두 항목 외에는 AI가 사연을 보고 `AI_RECOMMENDED` 항목(예: 은행·경찰 신고 내역)을 더한다.
+- `INCIDENT_REPORT.note`: "내가 피해를 입었다는 것을 보여 주는 기록입니다. 신고했다면 접수증이나 사건사고사실확인원을 받아 두세요." 공식 근거를 찾으면 `TYPE_GUIDE`로 올린다.
+- 이 항목의 서류는 v0.4 FE와 맞추려고 새 `DocType`을 만들지 않고 `OTHER`로 받는다. 그래서 이 사건에 `OTHER` 서류가 하나라도 있으면 충족(`SATISFIED`)으로 계산한다.
+- 이 유형은 공식 서류 목록을 확인하지 못했다. 그래서 위 세 항목 외에는 AI가 사연을 보고 `AI_RECOMMENDED` 항목(예: 은행 상담 기록, 입금자에게 반환을 제안한 기록)을 더한다.
 
 - `acceptedDocTypes`가 여러 개면 **그중 하나만 있어도 충족**이다. 업로드 화면에서 항목을 누르면 `acceptedDocTypes`의 첫 값을 기본 `docType`으로 쓰고, 여러 개면 고르게 한다.
 - `requiredForAnalysis: true`는 **AI 분석에 필요한 서류**라는 뜻이고, 법령·기사상 제출 의무와는 별개다. 항목 옆에 "AI 분석에 필요" 배지를 붙인다. 모든 유형에서 거래내역서 한 항목만 `true`다.
@@ -428,7 +432,8 @@ FE는 1.5초마다 부르고 `status`가 `RUNNING`이 아니면 멈춘다. 180�
   "steps": [
     { "seq": 1, "type": "OCR", "title": "서류 글자 읽기", "summary": "대화내역 1쪽, 글자 줄 34개", "status": "DONE", "at": "2026-11-21T06:45:02Z" },
     { "seq": 2, "type": "OCR", "title": "서류 글자 읽기 실패", "summary": "사업자등록증명.jpg: 글자를 읽지 못했습니다. 결과에서 직접 확인 항목으로 보여 드립니다.", "status": "FAILED", "at": "2026-11-21T06:45:06Z" },
-    { "seq": 3, "type": "TOOL_CALL", "title": "거래내역 조회", "summary": "11/1~11/10 입금 2건 확인", "status": "DONE", "at": "2026-11-21T06:45:19Z" }
+    { "seq": 3, "type": "TOOL_CALL", "title": "거래내역 조회", "summary": "사연의 11월 8일 대금 입금을 확인하려고 11/1~11/10 입금을 조회 → 2건", "status": "DONE", "at": "2026-11-21T06:45:19Z" },
+    { "seq": 4, "type": "CONFLICT", "title": "자료와 어긋남", "summary": "대화내역의 합의 금액(120,000원)이 사연·입금액(150,000원)과 다릅니다", "status": "DONE", "at": "2026-11-21T06:45:27Z" }
   ],
   "error": null,
   "startedAt": "2026-11-21T06:45:00Z",
@@ -437,6 +442,7 @@ FE는 1.5초마다 부르고 `status`가 `RUNNING`이 아니면 멈춘다. 180�
 ```
 
 - `stages[].status`: `PENDING` · `RUNNING` · `DONE` · `FAILED`
+- `TOOL_CALL`의 `summary`는 **AI가 밝힌 조회 이유 + 결과 건수**다. 이유에 판정처럼 읽히는 표현이 있으면 서버가 이유를 빼고 조회 범위만 적는다. `VERIFY`는 후검증 결과다(예: "근거와 다른 숫자 1개를 AI가 고쳐 다시 확인했습니다", `docs/agent-design.md` 2.6).
 - `steps`는 AI가 실제로 한 일을 보여 주는 기록이다. 화면에 다 보여 줄 필요는 없지만, 마지막 몇 줄을 흐리게 보여 주면 "AI가 무엇을 하는지" 시연에 좋다. `type`: `OCR` · `TOOL_CALL` · `FINDING` · `CONFLICT` · `DRAFT` · `VERIFY` · `FALLBACK` · `SAFETY` · `FAILED`
 - 서류 하나를 못 읽어도 분석은 계속된다(그 단계만 `FAILED`).
 - **샘플 사건 대체 결과:** `isSample: true`이고 사연·서류를 샘플 그대로 둔 사건(`inputVersion`이 생성 때와 같음)에서 AI 호출이 실패하거나 하루 한도(`DAILY_LIMIT`)를 넘으면, 서버는 실패로 끝내지 않고 그 시나리오용으로 미리 만든 결과로 `SUCCEEDED` 처리한다. 이때 `steps`에 `{ "type": "FALLBACK", "title": "미리 만든 결과 사용", "summary": "지금은 AI 분석을 쓸 수 없어 샘플용으로 미리 만든 결과를 보여 드립니다." }`를 남기고, 결과의 `precomputed`가 `true`가 된다(4.11). 사용자가 사연이나 서류를 바꾼 샘플 사건은 일반 사건처럼 실패·429를 받는다.
@@ -552,6 +558,7 @@ FE는 1.5초마다 부르고 `status`가 `RUNNING`이 아니면 멈춘다. 180�
     "sentences": [
       {
         "sentenceId": "s1",
+        "section": "DEPOSIT_REASON",
         "text": "본인은 온라인 쇼핑몰을 운영하는 개인사업자로, 2026년 11월 8일 거래처에 가죽 지갑 3개를 납품하고 그 대금 150,000원을 입금받았습니다.",
         "origin": "AI",
         "findingIds": ["f1…", "f2…"],
@@ -562,6 +569,7 @@ FE는 1.5초마다 부르고 `status`가 `RUNNING`이 아니면 멈춘다. 180�
       },
       {
         "sentenceId": "s2",
+        "section": "DEPOSIT_REASON",
         "text": "판매한 물건은 다음 날 택배로 발송하였습니다.",
         "origin": "AI",
         "findingIds": ["f3…"],
@@ -588,7 +596,9 @@ FE는 1.5초마다 부르고 `status`가 `RUNNING`이 아니면 멈춘다. 180�
 - `needsCheck: true` 문장은 노란 밑줄 + "확인 필요" + 사유(`NeedsCheckReason`). 문장을 누르면 `findingIds`의 탭 A 항목으로 이동.
 - 각 확인 필요 문장 옆에 "직접 확인했어요" 체크를 둔다 → `confirmed: true`로 저장. 체크해도 배지는 "직접 확인함"으로 남는다(근거가 생긴 것은 아니다).
 - **복사·PDF 저장 전에** `unconfirmedCount > 0`이면 "아직 확인하지 않은 문장이 N개 있어요. 사실과 다른 내용을 내면 처벌받을 수 있습니다(법 제16조)." 확인창을 띄우고 [문장으로 이동] / [그래도 복사] 중 고르게 한다.
-- `fullText`는 복사용(모든 문장을 공백으로 이은 것).
+- `section`(`DraftSection`): AI 문장은 항상 값이 있고 `DEPOSIT_REASON` → `NO_INVOLVEMENT` → `VICTIM_CONTEXT` 순서로 온다. `VICTIM_CONTEXT`는 사연·자료에 피해 정황이 있을 때만 나온다. 사용자가 더한 문장은 `null`이다.
+- FE는 문장을 배열 순서대로 보여 주고, `section`이 앞 문장과 달라지는 곳에 묶음 제목(`DraftSection` 화면 표시)을 넣는다. `null` 문장은 앞 문장 묶음에 이어 보여 준다.
+- `fullText`는 복사용. 같은 묶음 안의 문장은 공백으로, 묶음이 바뀌는 곳은 빈 줄(줄바꿈 두 번)로 잇는다.
 
 #### `PUT /cases/{caseId}/draft` — 수정 저장
 
@@ -606,7 +616,7 @@ FE는 1.5초마다 부르고 `status`가 `RUNNING`이 아니면 멈춘다. 180�
 - 배열 전체를 보낸다. 순서 = 화면 순서. 빠진 `sentenceId`는 삭제로 본다.
 - 기존 문장의 글을 바꾸면 서버가 `edited: true`로 바꾸고 `findingIds`·`needsCheck`는 유지한다(고쳤다고 근거가 생기지는 않는다).
 - `confirmed`: 생략하면 기존 값 유지. 단 **글이 바뀐 문장은 보낸 값과 관계없이 `false`로 되돌린다** — 같은 요청에서 `true`를 보내면 그대로 `true`.
-- `sentenceId: null`은 새 문장 → `origin: "USER"`, `needsCheck: false`.
+- `sentenceId: null`은 새 문장 → `origin: "USER"`, `needsCheck: false`, `section: null`. `section`은 PUT으로 바꿀 수 없다(보내도 무시).
 - 응답 `200 { "draft": {…, "version": 2} }`. 버전이 다르면 `409 VERSION_CONFLICT`.
 - 저장 시점: 문장 편집칸에서 포커스가 빠질 때, "직접 확인했어요"를 누를 때.
 
@@ -659,3 +669,4 @@ FE는 1.5초마다 부르고 `status`가 `RUNNING`이 아니면 멈춘다. 180�
 | 2026-11-21 | 0.2 | ① 사건은 화면 2 "다음"에서 생성 확정(사연은 화면 3에서 `PATCH`) ② `COMPARING` 문구를 "거래내역과 대조 중"으로, FE는 `stages[].label`만 표시 ③ 요구 서류에 `requiredForAnalysis` 추가, 거래내역서를 분석 시작 조건으로(`422`의 `details.missing`) |
 | 2026-11-21 | 0.3 | 외부 검토 반영. ① 초안: `CONFLICT` 연결 문장 자동 확인 필요, 진술 값 일치 시 서버가 연결, `warnings`, 문장별 `confirmed`·`unconfirmedCount`, 복사·PDF 전 확인창 ② 개인정보 보장 항목·`demoMode`·합성 데이터 안내 ③ `POST /cases/sample`, `GET /samples` 샘플 체험 ④ 일정에 리허설·소개서·제출(업로드+이메일) ⑤ `ANALYSIS_INPUT` 분류 신설, 물품 거래는 사업자 판매 대금 전제·예시를 청년 1인 판매 사업자로 ⑥ IP당 사건 생성 제한, `DAILY_LIMIT` ⑦ 미래 날짜 400 ⑧ 분석 시작에 `narrative` 동봉 ⑨ CORS 허용 헤더 |
 | 2026-11-21 | 0.4 | 체험 계정·마이페이지. ① L 체험 계정 선택(test01 `GOODS`, test02 `UNEXPECTED`), M 내 사건 화면 추가, 서버 인증은 그대로 ② localStorage `proofy.case` 한 건 → `proofy.cases` 배열 ③ `UNEXPECTED` 화면 노출, 유형별 항목(`THREAT_MESSAGE`, `UNKNOWN_DEPOSIT_RECORD`), 샘플 시나리오 추가, `SALARY` 샘플은 P1 ④ `case.sampleScenario` 추가 ⑤ 샘플 사건은 AI 실패·하루 한도 초과 때 미리 만든 결과로 끝남(`result.precomputed`, step `FALLBACK`) ⑥ 상담 안내 검사: 통장 대여·송금 대행 표현이 사연에 있으면 초안 대신 `result.referral`(step `SAFETY`) |
+| 2026-11-21 | 0.5 | AI 에이전트 계획 반영(`docs/agent-design.md`). ① 초안 문장에 `section`(`DraftSection`: 입금 경위·가담하지 않았다는 설명·피해 경위), `fullText`는 묶음 사이 빈 줄 ② `UNEXPECTED`에 피해 신고 기록 항목 `INCIDENT_REPORT`(`OPTIONAL`, 서류 종류는 기존 `OTHER`). **모두 필드·항목 추가라 v0.4 FE가 그대로 동작한다** ③ `TOOL_CALL` step `summary`에 AI가 밝힌 조회 이유, `VERIFY` step 설명 |

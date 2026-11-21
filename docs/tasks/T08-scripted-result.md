@@ -7,6 +7,7 @@
 - `AGENT_LLM=scripted` 분석기: 시나리오별로 정해 둔 대조 결과(GOODS는 계약 4.11 예시, UNEXPECTED는 계약 4.3.1 표)
 - `claim_findings`, `finding_sources`, AI 권장 체크리스트 항목 저장
 - `GET /cases/{id}/result`(계약 4.11), `isStale`, `summary`
+- scripted 결과에도 초안 `section`과 `TOOL_CALL` 조회 이유(`summary`)를 넣는다(계약 v0.5, `docs/agent-design.md` 2.4·2.5)
 
 ## 제외
 

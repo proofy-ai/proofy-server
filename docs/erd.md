@@ -316,7 +316,7 @@ erDiagram
 | `case_id` | UUID | FK, **UNIQUE**(사건당 현재본 1개) | |
 | `based_on_run_id` | UUID | FK | 초안의 기반 분석 |
 | `version` | INTEGER | 필수, ≥1 | 저장할 때마다 +1. `expectedVersion`이 다르면 409 |
-| `sentences_json` | JSON | 필수 | `[{sentenceId, text, origin: AI·USER, findingIds[], needsCheck, needsCheckReason, confirmed, edited}]` |
+| `sentences_json` | JSON | 필수 | `[{sentenceId, section, text, origin: AI·USER, findingIds[], needsCheck, needsCheckReason, confirmed, edited}]`. `section`은 계약 `DraftSection`(사용자 문장은 `null`) |
 | `warnings_json` | JSON | 필수, 기본 `[]` | `CONFLICT_NOT_IN_DRAFT` 등 |
 | `created_at` · `updated_at` | TIMESTAMP(UTC) | 필수 | |
 

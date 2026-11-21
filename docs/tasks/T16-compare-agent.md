@@ -8,6 +8,10 @@
 - 구조화 출력: findings, AI 권장 자료
 - `steps` 기록, 거절·시간 초과 처리
 - 재사용 시 출처를 커밋 메시지에 기록(corebank `llm/claude.py` 재시도·비용 등)
+- `agent/llm.py`: corebank `llm/claude.py`·`port.py`의 단가·비용 계산, 마감 안 재시도, 도구 결과 상한, `Usage`·`Deadline`을 가져온다(`docs/agent-design.md` 5·6절). 자동 캐시, thinking 파라미터 생략, effort `low` 명시, 서버측 fallback
+- 도구 인자에 `reason`(조회 이유) 필수 → step `TOOL_CALL` `summary`로 표시
+- 대조 결과 검증: 인용 원문 대조, 이 사건 소속·이번에 조회한 거래 ID만 인정(`docs/agent-design.md` 2.4)
+- LangGraph 등 프레임워크는 쓰지 않는다(11/21 결정)
 
 ## 제외
 
