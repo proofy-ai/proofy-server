@@ -80,7 +80,7 @@ T00 규칙
 | 작업 | 내용 | 상태 | 이슈 | PR |
 |---|---|---|---|---|
 | [T21](T21-legal-guides.md) | 내 상황 정리 + 법령 근거(11/22 추가, 2시간 상한) | 보류(코드만 있음, 계약 밖 #47) | #43 | #44 |
-| [T12](T12-synthetic-documents.md) | 합성 샘플 서류 | 대기 | #14 | |
+| [T12](T12-synthetic-documents.md) | 합성 샘플 서류 | 진행 중 | #14 | |
 | [T13](T13-text-extraction.md) | 글자 추출(텍스트 PDF, OCR) | 대기 | #15 | |
 | [T14](T14-masking.md) | 개인정보 마스킹 | 대기 | #16 | |
 | [T15](T15-transaction-rows.md) | 거래 행 추출 | 대기 | #17 | |
