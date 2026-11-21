@@ -7,6 +7,7 @@
 - 사연 표현 목록 검사(⓪ SAFETY, 계약 4.9): 걸리면 AI 호출 없이 끝, `result.referral`, `draft: null`, 초안 조회 404, step `SAFETY`
 - 판정 필드 부재 테스트: 결과·초안 JSON에 판정성 키가 없음
 - 판정성 표현 검사 함수(`JUDGMENT_EXPRESSION`)
+- 다시 분석해 상담 안내로 끝나면 이전 초안 행 삭제 → `GET /draft` 404(계약 v0.6 4.11). 계약 테스트 후보로 제안
 
 ## 제외
 

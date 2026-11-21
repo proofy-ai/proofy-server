@@ -56,9 +56,10 @@ POST /analysis-runs (202) → 백그라운드 실행, 마감 150초
 |---|---|---|
 | 올린 서류(PDF·PNG·JPG) | 글자가 든 PDF는 OCR 없이 추출(`pypdf`). 사진·스캔 PDF는 전처리 후 Tesseract OCR | `evidence.regions_json` 줄 단위 `{index, page, text, bbox, confidence}` |
 | 추출한 글자 | 주민번호·계좌·전화·이름을 가림(`김민수` → `김*수`) | `evidence.masked_text`, 영역마다 `maskedText` |
+| 사연 | 같은 규칙으로 가림(분석 시작 때) | `analysis_runs.masked_narrative` |
 
 - 못 읽은 서류는 `FAILED`로 두고 분석을 계속한다. 결과의 `unreadEvidence`로 "직접 확인"에 넘긴다.
-- **AI에는 마스킹한 글자만 간다.** 원본 이미지는 외부로 보내지 않는다. 인용 검증도 마스킹본 기준이다(AI가 본 글과 대조해야 하므로).
+- **AI에는 마스킹한 글자만 간다.** 원본 이미지는 외부로 보내지 않는다. 인용 검증도 마스킹본 기준이다(AI가 본 글과 대조해야 하므로). 서류는 `regions_json[].maskedText`, 사연은 `masked_narrative`와 대조한다(`docs/erd.md` 3.7).
 - 시연 서류는 글자가 든 PDF로 만든다(T12). 대조 품질이 거래내역서 인식에 달려 있기 때문이다. 사진 OCR은 Docker 이미지에서 동작을 확인한다.
 
 ### 2.3 ①-b 거래 행 추출 (T15, AI 1회 + 코드)
@@ -92,7 +93,7 @@ recommendedDocs[] = { label, reason, acceptedDocTypes[] }   → 체크리스트 
 - **판정 필드는 스키마에 없다**(해제 가능성, 수용 여부, 위험도 등). 프롬프트로만 막지 않는다.
 - test01 예시 결과: f1 "15만 원 입금" `MATCH`(t3) · f2 "15만 원에 합의" `CONFLICT`(채팅 12번 줄 "3개 12만원에 할게요") · f3 "다음 날 택배" `STATEMENT_ONLY`. f2는 step `CONFLICT`로 바로 보인다. **시연의 핵심 장면**이다.
 - 대조 결과 검증(코드, 저장 전):
-  - 인용문이 그 서류 줄(또는 사연)에 공백을 무시하고 들어 있나 → 아니면 `verified: false`(흐리게 표시, 지우지 않음)
+  - 인용문이 그 서류 줄의 마스킹본(또는 마스킹한 사연)에 공백을 무시하고 들어 있나 → 아니면 `verified: false`(흐리게 표시, 지우지 않음)
   - `evidenceId`·`regionIndex`가 이 사건에 있나, `transactionId`가 이번 실행의 도구가 돌려준 ID인가 → 아니면 그 근거를 빼고 step `VERIFY`에 남긴다. 근거가 하나도 남지 않은 `MATCH`는 `UNKNOWN`으로 바꾼다
   - 글자 수 상한으로 자른다(긴 출력 유도 방지)
 

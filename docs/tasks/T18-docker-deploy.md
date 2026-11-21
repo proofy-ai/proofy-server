@@ -8,6 +8,9 @@
 - 배포 환경 결정과 배포, Postgres, 환경변수(키는 환경변수로만)
 - FE 배포 주소 CORS 등록
 - Alembic 도입: 배포 시점의 스키마를 첫 변경 파일로 만들고, 이후 스키마 변경은 변경 파일로 배포 DB에 반영. 서버 시작 시 `create_all` 대신 마이그레이션 적용
+- 배포 DB에 증빙 파일이 들어가므로(`evidence_files`) 용량 확인. 서버 디스크에 영구 저장을 기대하지 않는다
+- CORS: FE Cloudflare 고정 도메인만(미리보기 주소 제외), 개발·운영 서버 주소를 FE에 공유
+- 환경변수: `IP_HASH_SECRET`, 한도 3종(T11), `CORS_ORIGINS`, `ANTHROPIC_API_KEY`
 
 ## 제외
 

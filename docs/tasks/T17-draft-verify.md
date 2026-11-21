@@ -10,6 +10,7 @@
 - 초안 문장마다 `section`(입금 경위 → 가담하지 않았다는 설명 → 피해 경위, 계약 v0.5 `DraftSection`)
 - `NUMBER_MISMATCH`·`JUDGMENT_EXPRESSION` 문장만 AI가 1회 고쳐 쓰고 재검증, 또 걸리면 원래 문장 + 확인 필요(`docs/agent-design.md` 2.6). step `VERIFY`
 - 방식 참고: corebank `worker.py` 인용 대조, DonWorry `narrative.py` 근거 번호 enum·숫자 검사(코드는 새로 작성)
+- 인용 대조 기준은 마스킹한 글: 서류는 `regions_json[].maskedText`, 사연은 `masked_narrative`(ERD v1.1 3.7)
 
 ## 제외
 

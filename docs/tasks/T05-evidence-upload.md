@@ -6,8 +6,9 @@
 
 - `evidence` 테이블, `POST/GET/DELETE /cases/{id}/evidence`(계약 4.7)
 - 파일 내용으로 형식 판별(JPG·PNG·PDF), 10MB 413, 형식 415, 사건당 8개 409
-- `uploads/{caseId}/`에 저장, 사건 삭제 시 함께 삭제
+- 사건 삭제 시 파일도 함께 삭제
 - 올리면 `inputVersion` 증가, 체크리스트 충족 반영
+- 파일 내용은 서버 디스크가 아니라 DB `evidence_files`에 저장(재배포 때 유실 방지, ERD v1.1 3.3.1). 쓰지 않게 되는 `UPLOAD_DIR` 설정(`app/config.py`, `.env.example`, README)은 이때 뺀다
 
 ## 제외
 

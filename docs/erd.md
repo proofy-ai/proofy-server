@@ -1,7 +1,8 @@
-# Proofy ERD v1.0 (P0)
+# Proofy ERD v1.1 (P0)
 
 - 작성 2026-11-21 · **데이터 모델 정본.** 구현(`app/models/`)과 다르면 이 문서를 먼저 고치고 구현을 맞춘다
-- 근거: 초안 `etc/proofy_erd_v0.1.md`(레포 밖), 검토 결정 `docs/erd-review.md`, API 계약 `docs/contract.md` v0.4, AI 흐름 `docs/agent-design.md`
+- 근거: 초안 `etc/proofy_erd_v0.1.md`(레포 밖), 검토 결정 `docs/erd-review.md`, API 계약 `docs/contract.md` v0.6, AI 흐름 `docs/agent-design.md`
+- v1.1(2026-11-21): FE 수정 요청 반영. `usage_events` 추가(한도·비용을 사건과 분리), 증빙 파일을 DB에 저장(`evidence_files`), 인용 검증 기준을 마스킹한 글로 명시, `input_version`은 값이 실제로 바뀔 때만, 상담 안내 실행은 이전 초안 삭제
 - DB: 로컬 SQLite, 배포 Postgres. UUID는 문자열(36자), JSON은 SQLAlchemy `JSON` 타입(둘 다 동작), 시각은 UTC로 저장
 - 테이블 생성: 서버 시작 시 생성. 배포 때(T18) Alembic 도입
 
@@ -13,7 +14,7 @@
 | AI는 판정하지 않는다 | 해제·수용 가능성, 판정 갈래, 제출·심사 상태 컬럼이 없다. `MATCH`는 "일치하는 자료가 있다"는 뜻일 뿐이다 |
 | 숫자·날짜는 코드가 만든다 | D-day, 체크리스트 충족 여부, `unconfirmedCount`, `isStale`은 저장하지 않고 읽을 때 계산한다 |
 | 근거는 같은 사건 안에서만 | `finding_sources`가 가리키는 증빙·거래는 같은 사건 소속이어야 한다. FK만으로는 못 막으므로 서버 검증기가 확인한다 |
-| 개인정보 최소화 | 신분증, 신청인 인적사항(별지 제4호 이름·주소·계좌)은 저장하지 않는다. AI에는 `masked_text`만 보낸다. 사건은 24시간 뒤 삭제 |
+| 개인정보 최소화 | 신분증, 신청인 인적사항(별지 제4호 이름·주소·계좌)은 저장하지 않는다. AI에는 마스킹한 글(`masked_text`, 마스킹한 사연)만 보낸다. 사건은 24시간 뒤 삭제. 사용량 로그(`usage_events`)에는 개인정보를 두지 않는다 |
 
 ## 2. 관계도
 
@@ -21,6 +22,7 @@
 erDiagram
     cases ||--|| case_inflows : "진술 입금(P0 1건)"
     cases ||--o{ evidence : "올린 서류(최대 8)"
+    evidence ||--|| evidence_files : "파일 내용"
     cases ||--o{ analysis_runs : "분석 실행"
     cases ||--o{ checklist_items : "준비 서류 체크"
     cases ||--o| drafts : "소명서 초안(현재본 1)"
@@ -45,7 +47,6 @@ erDiagram
         bool has_prior_freeze
         text narrative
         int input_version
-        string created_ip_hash
         datetime created_at
         datetime updated_at
         datetime expires_at
@@ -65,7 +66,6 @@ erDiagram
         string original_name
         string mime_type
         int size_bytes
-        string storage_key
         string content_sha256
         bool is_sample
         string extract_status
@@ -77,6 +77,10 @@ erDiagram
         string extract_error
         datetime created_at
         datetime extracted_at
+    }
+    evidence_files {
+        string evidence_id PK
+        blob content
     }
     transactions {
         string id PK
@@ -104,12 +108,10 @@ erDiagram
         string error_message
         bool precomputed
         json referral_json
+        text masked_narrative
         string agent
         string model
         string prompt_version
-        int input_tokens
-        int output_tokens
-        int cost_micro_usd
         datetime started_at
         datetime finished_at
     }
@@ -157,7 +159,29 @@ erDiagram
     }
 ```
 
-모든 하위 테이블은 `cases` 삭제 시 함께 삭제된다(ON DELETE CASCADE). 증빙 파일도 디스크에서 지운다.
+모든 하위 테이블은 `cases` 삭제 시 함께 삭제된다(ON DELETE CASCADE). 증빙 파일도 `evidence_files`에 있으므로 함께 지워진다.
+
+사건과 따로 있는 테이블: `usage_events`(3.10). 사건과 FK로 묶지 않아 사건을 지우거나 24시간 정리가 돌아도 남는다. 한도와 비용은 여기서 센다.
+
+```mermaid
+erDiagram
+    usage_events {
+        string id PK
+        string kind
+        string case_id
+        string run_id
+        string ip_hash
+        bool ai_called
+        bool precomputed
+        bool referral
+        string agent
+        string model
+        int input_tokens
+        int output_tokens
+        int cost_micro_usd
+        datetime created_at
+    }
+```
 
 ## 3. 테이블 명세
 
@@ -177,8 +201,7 @@ erDiagram
 | `public_notice_date` | DATE | NULL | 채권소멸절차 개시 **공고일**. 모르면 NULL. 미래 불가 |
 | `has_prior_freeze` | BOOLEAN | NULL | 과거 지급정지 이력. 모름(NULL)과 없음(false) 구분 |
 | `narrative` | TEXT | NULL, 2000자 이하 | 사연(진술). 화면 3에서 채운다 |
-| `input_version` | INTEGER | 필수, ≥1, 기본 1 | 사연·입금 정보·날짜·증빙이 바뀔 때마다 +1 |
-| `created_ip_hash` | CHAR(64) | NULL | IP당 생성 제한용 해시(T11). IP 원문은 저장하지 않는다 |
+| `input_version` | INTEGER | 필수, ≥1, 기본 1 | 사연·입금 정보·날짜가 **실제로 다른 값으로** 바뀌거나 증빙을 추가·삭제할 때 +1. 같은 값을 다시 저장하면 그대로(4절) |
 | `created_at` · `updated_at` | TIMESTAMP(UTC) | 필수 | |
 | `expires_at` | TIMESTAMP(UTC) | 필수 | `created_at` + 24시간. 지나면 404, 주기 정리로 삭제(T11) |
 
@@ -205,17 +228,27 @@ erDiagram
 | `original_name` | VARCHAR(255) | 필수 | |
 | `mime_type` | VARCHAR(64) | 필수 | 파일 내용으로 판별한 `image/jpeg`·`image/png`·`application/pdf` |
 | `size_bytes` | INTEGER | 필수, ≤10MB | |
-| `storage_key` | VARCHAR(500) | 필수 | 서버 저장 위치(`uploads/{caseId}/…`). 응답에 내보내지 않는다 |
-| `content_sha256` | CHAR(64) | 필수 | 무결성 확인 |
+| `content_sha256` | CHAR(64) | 필수 | 무결성 확인. 파일 내용은 `evidence_files`(3.3.1) |
 | `is_sample` | BOOLEAN | 필수, 기본 false | 합성 샘플 서류 |
 | `extract_status` | VARCHAR(16) | 필수, 기본 `UPLOADED` | `UPLOADED` · `PROCESSING` · `READY` · `FAILED` |
 | `extract_method` | VARCHAR(16) | NULL | `PDF_TEXT`(OCR 생략) · `OCR` |
 | `extracted_text` | TEXT | NULL | 추출 원문. **서버 안에서만** 쓰고 외부 AI에 보내지 않는다 |
 | `masked_text` | TEXT | NULL | 주민번호·계좌·전화·이름을 가린 글. AI에는 이것만 보낸다(T14) |
-| `regions_json` | JSON | NULL | 줄 단위 영역 `[{index, page, text, maskedText, bbox, confidence}]`. 인용 검증의 기준 원문 |
+| `regions_json` | JSON | NULL | 줄 단위 영역 `[{index, page, text, maskedText, bbox, confidence}]`. **인용 검증은 `maskedText`와 대조한다**(AI가 본 글이 마스킹본이므로). `text`는 서버 안에서 거래 행의 금액·날짜 확인(3.4)에만 쓴다 |
 | `low_confidence_regions` | INTEGER | NULL | 신뢰도 낮은 영역 수(계약 `lowConfidenceRegions`) |
 | `extract_error` | VARCHAR(200) | NULL | 못 읽은 이유("직접 확인" 안내용) |
 | `created_at` · `extracted_at` | TIMESTAMP(UTC) | 뒤는 NULL | |
+
+### 3.3.1 `evidence_files` — 증빙 파일 내용 (T05)
+
+호스팅 디스크는 재시작·재배포 때 지워질 수 있다. 파일만 사라지고 사건이 남아 분석이 깨지지 않게 **파일 내용을 DB에 둔다.** 사건당 최대 80MB(10MB × 8)이고 24시간 뒤 사건과 함께 지워진다.
+
+| 컬럼 | 타입 | 제약 | 의미 |
+|---|---|---|---|
+| `evidence_id` | UUID | PK, FK(`evidence`, ON DELETE CASCADE) | |
+| `content` | BLOB(Postgres `BYTEA`) | 필수 | 업로드한 파일 원본. 응답으로 내보내지 않고 외부 AI에도 보내지 않는다 |
+
+`evidence`와 나눈 이유: 목록·결과를 조회할 때 파일 내용을 읽지 않게 하려고.
 
 ### 3.4 `transactions` — 거래내역서에서 뽑은 거래 행 (T08 샘플용, T15 실제 추출)
 
@@ -249,10 +282,10 @@ erDiagram
 | `steps_json` | JSON | 필수, 기본 `[]` | 4번 화면 `steps` + 도구 호출 기록(도구가 **실제로 돌려준 거래 ID** 포함 → 후검증 기준) |
 | `error_code` · `error_message` | VARCHAR | NULL | `AGENT_FAILED` · `AGENT_TIMEOUT` · `AGENT_REFUSED` |
 | `precomputed` | BOOLEAN | 필수, 기본 false | 샘플 사건에서 AI 대신 미리 만든 결과를 썼나(T11) |
-| `referral_json` | JSON | NULL | 상담 안내 `{code, matchedPhrases}`. 있으면 초안을 만들지 않는다(T10) |
+| `referral_json` | JSON | NULL | 상담 안내 `{code, matchedPhrases}`. 있으면 초안을 만들지 않고, 사건에 남아 있던 이전 초안을 지운다(T10) |
+| `masked_narrative` | TEXT | NULL | 이 실행이 AI에 보낸 마스킹한 사연. 사연 인용(`NARRATIVE`)의 검증 기준(T14·T17). 상담 안내로 끝난 실행은 NULL |
 | `agent` | VARCHAR(16) | 필수 | `scripted` · `claude` |
 | `model` · `prompt_version` | VARCHAR | NULL | 예: `claude-opus-5-5`, 프롬프트 버전 |
-| `input_tokens` · `output_tokens` · `cost_micro_usd` | INTEGER | NULL | 비용 근거(T19 실측, 소개서) |
 | `started_at` · `finished_at` | TIMESTAMP(UTC) | 뒤는 NULL | 150초 넘으면 서버가 실패 처리 |
 
 ### 3.6 `claim_findings` — 주장별 대조 결과 (T08)
@@ -285,7 +318,7 @@ erDiagram
 **서버 검증기(T17)가 확인하는 것** (FK로는 못 막는 것)
 1. 가리키는 증빙·거래가 **같은 사건** 소속인가
 2. `transaction_id`가 **이번 실행의 도구가 실제로 돌려준 ID**인가(`analysis_runs.steps_json`)
-3. `quoted_text`가 해당 영역 원문(또는 사연)에 실제로 있는가(공백 무시 부분 문자열)
+3. `quoted_text`가 **마스킹한 글**에 실제로 있는가(공백 무시 부분 문자열). `EVIDENCE`는 `evidence.regions_json[region_index].maskedText`, `NARRATIVE`는 `analysis_runs.masked_narrative`와 대조한다. 원문(`text`)과 대조하면 AI가 본 가린 글(`김*수`)이 모두 불일치가 된다
 4. 실패한 근거는 지우지 않고 `is_verified=false`, 연결된 초안 문장은 "확인 필요"
 
 ### 3.8 `checklist_items` — 준비 서류 체크 (T04, AI 권장은 T08)
@@ -320,7 +353,30 @@ erDiagram
 | `warnings_json` | JSON | 필수, 기본 `[]` | `CONFLICT_NOT_IN_DRAFT` 등 |
 | `created_at` · `updated_at` | TIMESTAMP(UTC) | 필수 | |
 
-저장하지 않는 것: `unconfirmedCount`, `fullText`(읽을 때 계산). 상담 안내(`referral_json`)가 있는 실행은 초안을 만들지 않는다.
+저장하지 않는 것: `unconfirmedCount`, `fullText`(읽을 때 계산). 상담 안내(`referral_json`)가 있는 실행은 초안을 만들지 않고, 그 실행이 성공하면 이 사건의 `drafts` 행을 지운다(계약 4.11: 이때 `GET /draft`는 404).
+
+### 3.10 `usage_events` — 사용량 로그 (T11, 비용은 T16·T19)
+
+한도와 비용을 사건과 분리해서 센다. **사건과 FK로 묶지 않는다**(사건을 지워도 남는다). 개인정보가 없다.
+
+| 컬럼 | 타입 | 제약 | 의미 |
+|---|---|---|---|
+| `id` | UUID | PK | |
+| `kind` | VARCHAR(16) | 필수 | `CASE_CREATE`(사건·샘플 사건 생성) · `ANALYSIS_RUN`(분석 시작) |
+| `case_id` | UUID | 필수, FK 아님 | 사건당 시간당 분석 5회 계산용. 사건이 지워져도 값만 남는다 |
+| `run_id` | UUID | NULL, FK 아님 | `ANALYSIS_RUN`일 때 |
+| `ip_hash` | CHAR(64) | NULL | `HMAC-SHA256(IP_HASH_SECRET, IP)`. IP 원문은 저장하지 않는다. 24시간 정리 때 NULL로 비운다 |
+| `ai_called` | BOOLEAN | 필수, 기본 false | 외부 AI를 불렀나. **하루 한도는 이 값이 true인 행만 센다**(상담 안내, 한도 초과로 쓴 미리 만든 결과는 false) |
+| `precomputed` · `referral` | BOOLEAN | 필수, 기본 false | 미리 만든 결과로 끝났나, 상담 안내로 끝났나 |
+| `agent` | VARCHAR(16) | NULL | `scripted` · `claude` |
+| `model` | VARCHAR | NULL | 예: `claude-opus-5-5` |
+| `input_tokens` · `output_tokens` · `cost_micro_usd` | INTEGER | NULL | 실행이 끝날 때 채운다. 비용 실측(T19, 소개서) |
+| `created_at` | TIMESTAMP(UTC) | 필수 | |
+
+**한도 계산**(값은 환경변수로 바꿀 수 있다, 계약 1.1):
+- IP당 사건 생성: 같은 `ip_hash`의 `CASE_CREATE`가 최근 1시간에 `RATE_LIMIT_CASES_PER_IP_HOUR`(기본 20)개 이상이면 429 `RATE_LIMITED`
+- 사건당 분석: 같은 `case_id`의 `ANALYSIS_RUN`이 최근 1시간에 `RATE_LIMIT_RUNS_PER_CASE_HOUR`(기본 5)개 이상이면 429 `RATE_LIMITED`
+- 하루 분석: 오늘(한국 날짜 0시부터) `ai_called = true`인 `ANALYSIS_RUN`이 `DAILY_ANALYSIS_LIMIT`(기본 300)개 이상이면 429 `DAILY_LIMIT`. 이 값과 사용량은 `GET /health`의 `dailyUsage`로 보인다
 
 ## 4. 상태와 버전
 
@@ -336,10 +392,12 @@ stateDiagram-v2
 
 | 행위 | 바뀌는 것 |
 |---|---|
-| 사연·입금 정보·날짜 수정, 증빙 추가·삭제 | `cases.input_version` +1 → 기존 결과는 `isStale` |
-| 분석 시작 | `analysis_runs` 새 행, `version` +1, `based_on_input_version` 기록 |
-| 분석 성공 | 그 실행의 `transactions`, `claim_findings`, `finding_sources`, AI 권장 `checklist_items`, `drafts` 기록 |
-| 다시 분석 | 이전 실행은 지우지 않고 새 실행을 만든다. 결과 API는 가장 최근 성공 실행을 보여 준다. 사용자가 고친 초안이 있으면 확인 후(409 `DRAFT_HAS_EDITS`) 덮어쓴다 |
+| 사연·입금 정보·날짜 수정(`PATCH`, 분석 시작 때 보낸 `narrative` 포함) | 저장된 값과 **실제로 다를 때만** `cases.input_version` +1 → 기존 결과는 `isStale`. 같은 값이면 그대로(샘플 사건이 "샘플 그대로" 조건을 잃지 않게) |
+| 증빙 추가·삭제 | `cases.input_version` +1 |
+| 사건 생성 | `usage_events`(`CASE_CREATE`) 새 행 |
+| 분석 시작 | `analysis_runs` 새 행, `version` +1, `based_on_input_version` 기록. `usage_events`(`ANALYSIS_RUN`) 새 행 |
+| 분석 성공 | 그 실행의 `transactions`, `claim_findings`, `finding_sources`, AI 권장 `checklist_items`, `drafts` 기록. 상담 안내로 끝나면 `drafts` 행을 지운다 |
+| 다시 분석 | 이전 실행은 지우지 않고 새 실행을 만든다. **결과·거래·AI 권장 체크리스트 항목은 가장 최근 성공 실행 것만 보여 준다**(이전 실행의 행은 조회에서 거른다). 사용자가 고친 초안이 있으면 확인 후(409 `DRAFT_HAS_EDITS`) 덮어쓴다 |
 | 초안 저장 | `drafts.version` +1 |
 
 ## 5. 초안(v0.1) 대비 바뀐 점
@@ -361,7 +419,9 @@ stateDiagram-v2
 | 공고일 출처 `public_notice_source` | 있음 | 없음(P1) | 화면에 출처 입력이 없다. 기한 응답의 `basis`에 "참고 계산", `notice`에 "은행 확인"을 항상 붙여 대신한다 |
 | `bank_name`, 입금 `sender_label`·`description` | 있음 | 없음 | 화면에 입력이 없다. 경위는 `cases.narrative`에 |
 | 입금 시각 `occurred_at` | TIMESTAMP | DATE | 계약이 날짜만 받는다 |
-| 추가 컬럼 | | `is_sample`·`sample_*`·`expires_at`·`created_ip_hash`·`masked_text`·`regions_json`·`precomputed`·`referral_json`·비용 컬럼 | 체험 계정, 24시간 삭제, IP 제한, 마스킹, 대체 결과, 상담 안내, 비용 실측 |
+| 추가 컬럼 | | `is_sample`·`sample_*`·`expires_at`·`masked_text`·`regions_json`·`masked_narrative`·`precomputed`·`referral_json` | 체험 계정, 24시간 삭제, 마스킹, 대체 결과, 상담 안내 |
+| 사용량·비용 | 없음 | `usage_events`(사건과 분리) | 사건을 지워도 한도·비용 기록이 남게(v1.1, FE 요청) |
+| 증빙 파일 위치 | 서버 디스크 | `evidence_files`(DB) | 재배포 때 디스크가 지워져도 파일이 남게(v1.1, FE 요청) |
 
 ## 6. P1 (이번에 만들지 않음)
 
@@ -377,8 +437,9 @@ stateDiagram-v2
 |---|---|
 | T03 사건 API | `cases`, `case_inflows` |
 | T04 서류 목록·체크리스트 | `checklist_items` |
-| T05 증빙 업로드 | `evidence` |
+| T05 증빙 업로드 | `evidence`, `evidence_files` |
 | T07 분석 실행 | `analysis_runs` |
 | T08 가짜 분석기 + 결과 | `claim_findings`, `finding_sources`, `transactions`(샘플 시나리오 고정 행) |
 | T09 초안 API | `drafts` |
+| T11 운영 보호 | `usage_events` |
 | T13·T14·T15 | `evidence` 추출 컬럼 채움, `transactions` 실제 추출 |
