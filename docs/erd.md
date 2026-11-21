@@ -1,8 +1,9 @@
-# Proofy ERD v1.1 (P0)
+# Proofy ERD v1.2 (P0)
 
 - 작성 2026-11-21 · **데이터 모델 정본.** 구현(`app/models/`)과 다르면 이 문서를 먼저 고치고 구현을 맞춘다
 - 근거: 초안 `etc/proofy_erd_v0.1.md`(레포 밖), 검토 결정 `docs/erd-review.md`, API 계약 `docs/contract.md` v0.6, AI 흐름 `docs/agent-design.md`
 - v1.1(2026-11-21): FE 수정 요청 반영. `usage_events` 추가(한도·비용을 사건과 분리), 증빙 파일을 DB에 저장(`evidence_files`), 인용 검증 기준을 마스킹한 글로 명시, `input_version`은 값이 실제로 바뀔 때만, 상담 안내 실행은 이전 초안 삭제
+- v1.2(2026-11-22, T08): `finding_sources.seq`(근거 화면 순서) 추가, 서류를 지우면 그 서류에서 나온 거래 행·근거도 함께 지움(ON DELETE CASCADE, 결과는 `isStale`), AI 권장 항목 상한 3개와 충족 계산 규칙
 - DB: 로컬 SQLite, 배포 Postgres. UUID는 문자열(36자), JSON은 SQLAlchemy `JSON` 타입(둘 다 동작), 시각은 UTC로 저장
 - 테이블 생성: 서버 시작 시 생성. 배포 때(T18) Alembic 도입
 
@@ -258,7 +259,7 @@ erDiagram
 |---|---|---|---|
 | `id` | UUID | PK | `transactionId` |
 | `case_id` | UUID | FK | 같은 사건 검증을 쉽게 하려고 둔다 |
-| `evidence_id` | UUID | FK | 어느 거래내역서에서 뽑았나(`docType=TRANSACTION_RECORD`) |
+| `evidence_id` | UUID | FK(ON DELETE CASCADE) | 어느 거래내역서에서 뽑았나(`docType=TRANSACTION_RECORD`). 서류를 지우면 행도 지운다 |
 | `analysis_run_id` | UUID | FK | 어느 분석 실행이 뽑았나. 재분석하면 새로 뽑는다 |
 | `source` | VARCHAR(16) | 필수 | `STATEMENT`(거래내역서). 확장 시 `OPEN_BANKING` |
 | `region_index` | INTEGER | 필수 | `evidence.regions_json`의 위치 |
@@ -306,9 +307,10 @@ erDiagram
 |---|---|---|---|
 | `id` | UUID | PK | |
 | `finding_id` | UUID | FK | 주장 하나에 근거 여러 개 |
+| `seq` | INTEGER | 필수 | 주장 안에서 근거 화면 순서 |
 | `source_kind` | VARCHAR(16) | 필수 | `EVIDENCE` · `TRANSACTION` · `NARRATIVE` |
-| `evidence_id` | UUID | FK NULL | `EVIDENCE`일 때만 |
-| `transaction_id` | UUID | FK NULL | `TRANSACTION`일 때만 |
+| `evidence_id` | UUID | FK NULL(ON DELETE CASCADE) | `EVIDENCE`일 때만 |
+| `transaction_id` | UUID | FK NULL(ON DELETE CASCADE) | `TRANSACTION`일 때만 |
 | `page` · `region_index` | INTEGER | NULL | `EVIDENCE`의 위치 |
 | `quoted_text` | TEXT | NULL | 인용 문구(`EVIDENCE`·`NARRATIVE`) |
 | `is_verified` | BOOLEAN | 필수 | 서버 검증 통과 여부. false면 화면에 흐리게 표시 |
@@ -338,6 +340,8 @@ erDiagram
 | `created_at` | TIMESTAMP(UTC) | 필수 | |
 
 **CHECK:** 상수 항목(`code` 값 있음, `analysis_run_id` NULL) 또는 AI 권장 항목(`code` NULL, `analysis_run_id` 값 있음, `category = AI_RECOMMENDED`). AI 권장 항목을 공식 의무로 바꾸지 않는다.
+
+AI 권장 항목은 한 실행당 최대 3개다. 충족 여부는 `accepted_doc_types_json` 중 **그 사건의 상수 항목이 받지 않는 `docType`** 으로만 계산한다(계약 v0.6.5 4.8). `analysis_run_id`는 FK(ON DELETE CASCADE).
 
 입금 유형이 바뀌면(PATCH) 상수 항목 행을 새 유형 목록으로 다시 만들고, 같은 `code`의 `checked`는 이어받는다.
 

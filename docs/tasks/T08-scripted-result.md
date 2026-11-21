@@ -112,3 +112,12 @@
 
 ## 결과
 
+- 11/22 구현 완료. `uv run python -m pytest -q` → 73 passed(T08 9개 추가), `uv run ruff check .` 통과
+- 실제 서버(8099, 임시 SQLite, 단계 사이 1초)로 test02 확인: 단계가 1초마다 넘어감, step 7개(OCR 2·TOOL_CALL 2·FINDING·CONFLICT·DRAFT), 결과 CONFLICT(DATE) 1·MATCH 2·STATEMENT_ONLY 1, 탭 B `INCIDENT_REPORT` MISSING
+- 계획과 달라진 것
+  - 분석기 단계 함수가 출력 `out`을 함께 받는다(`extract(ctx, rec, out)` 등). `runner.execute`가 출력을 돌려주고, 서비스가 실행을 `SUCCEEDED`로 바꾸는 **같은 커밋**에 저장한다(그사이 시간 초과로 끝났으면 결과도 버림)
+  - 자료 근거(서류·거래)가 하나도 남지 않은 `MATCH`뿐 아니라 `CONFLICT`도 `UNKNOWN`으로 바꾼다(어긋남을 보여 줄 자료가 없으므로)
+  - ERD v1.2: `finding_sources.seq` 추가, 서류를 지우면 그 서류의 거래 행·근거도 지움(CASCADE), `checklist_items.analysis_run_id` FK
+  - AI 권장 항목 규칙(계약 v0.6.5): 서류 종류로 거르지 않음, 최대 3개, 고정 항목이 받는 `docType`으로는 자동 충족 안 됨. 테스트 2개 추가(계약 테스트 아님)
+  - DRAFT step 문구는 T09 전까지 "초안 작성 기능은 준비 중입니다."
+- 주의: 기존 로컬 `proofy.sqlite3`는 `checklist_items`에 새 FK가 없다(테이블을 다시 만들지 않음). 지우고 다시 만들 것
