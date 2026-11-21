@@ -5,6 +5,8 @@
 - 사건당 동시 실행은 1개다. 확인과 실행 행 만들기를 사건별 잠금 안에서 한다(서버 프로세스 1개 전제).
 - 마감(기본 150초)은 스레드가 단계마다 확인한다. 서버 재시작으로 스레드가 사라진 실행은 조회·시작 때
   마감이 지났으면 그 자리에서 시간 초과로 끝낸다.
+- 분석 결과(대조 결과·거래 행·AI 권장 항목)는 실행을 `SUCCEEDED`로 바꾸는 것과 같은 커밋에 저장한다.
+  그사이 시간 초과로 끝난 실행이면 결과도 버린다.
 """
 
 import logging
@@ -19,6 +21,7 @@ from sqlalchemy import update
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.agent import runner
+from app.agent.output import AnalysisOutput
 from app.agent.runner import EvidenceRef, RunContext
 from app.agent.steps import (
     STAGES,
@@ -37,6 +40,7 @@ from app.schemas.case import CasePatch
 from app.services.cases import update_case
 from app.services.clock import utc_now
 from app.services.evidence import list_evidence
+from app.services.results import save_output
 from app.services.runs import latest_run
 
 logger = logging.getLogger("proofy.analysis")
@@ -151,6 +155,7 @@ def start_analysis(
             EvidenceRef(e.id, e.doc_type, e.original_name) for e in list_evidence(db, case.id)
         ),
         deadline=time.monotonic() + settings.analysis_timeout_seconds,
+        stage_delay_seconds=settings.scripted_stage_delay_seconds,
     )
     threading.Thread(
         target=_run_in_background,
@@ -164,7 +169,7 @@ def start_analysis(
 def _run_in_background(session_factory: sessionmaker[Session], ctx: RunContext) -> None:
     recorder = DbRecorder(session_factory, ctx.run_id)
     try:
-        runner.execute(ctx, recorder)
+        output = runner.execute(ctx, recorder)
     except RunStopped:
         logger.info("분석 %s: 밖에서 끝난 실행이라 멈춤", ctx.run_id)
         return
@@ -176,7 +181,11 @@ def _run_in_background(session_factory: sessionmaker[Session], ctx: RunContext) 
         logger.exception("분석 %s 실패", ctx.run_id)
         recorder.finish(AgentError())
         return
-    recorder.finish(None)
+    try:
+        recorder.finish(None, output)
+    except Exception:
+        logger.exception("분석 %s 결과 저장 실패", ctx.run_id)
+        recorder.finish(AgentError())
 
 
 def _iso_now() -> str:
@@ -206,6 +215,7 @@ def _finish_run(db: Session, run: AnalysisRun, error: AgentError | None) -> bool
     """실행을 끝낸다. 아직 `RUNNING`일 때만 바꾸고, 바꿨으면 True.
 
     상태 조건을 UPDATE 문에 넣어, 시간 초과 처리와 스레드의 마무리가 겹쳐도 한쪽만 반영되게 한다.
+    바꾸지 못했으면 세션에 넣어 둔 결과 행도 버린다(롤백).
     """
     values: dict[str, Any] = {"finished_at": utc_now()}
     if error is None:
@@ -227,10 +237,12 @@ def _finish_run(db: Session, run: AnalysisRun, error: AgentError | None) -> bool
         .values(**values)
     )
     changed = result.rowcount == 1
-    if changed:
-        db.execute(update(Case).where(Case.id == run.case_id).values(status=case_status))
+    if not changed:
+        db.rollback()
+        return False
+    db.execute(update(Case).where(Case.id == run.case_id).values(status=case_status))
     db.commit()
-    return changed
+    return True
 
 
 def expire_if_overdue(db: Session, run: AnalysisRun, timeout_seconds: float) -> None:
@@ -273,11 +285,13 @@ class DbRecorder:
 
         self._update(change)
 
-    def finish(self, error: AgentError | None) -> None:
+    def finish(self, error: AgentError | None, output: AnalysisOutput | None = None) -> None:
         with self._session_factory() as db:
             run = db.get(AnalysisRun, self._run_id)
-            if run is None:
+            if run is None or run.status != "RUNNING":
                 return
+            if error is None and output is not None:
+                save_output(db, run, output)
             _finish_run(db, run, error)
 
 

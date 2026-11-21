@@ -69,8 +69,8 @@ T00 규칙
 
 | 작업 | 내용 | 상태 | 이슈 | PR |
 |---|---|---|---|---|
-| [T07](T07-analysis-runs.md) | 분석 실행·진행 | PR | #9 | #39 |
-| [T08](T08-scripted-result.md) | 가짜 분석기 + 결과 API | 계획 확인 | #10 | |
+| [T07](T07-analysis-runs.md) | 분석 실행·진행 | 완료 | #9 | #39 |
+| [T08](T08-scripted-result.md) | 가짜 분석기 + 결과 API | PR | #10 | #42 |
 | [T09](T09-draft-api.md) | 초안 API | 대기 | #11 | |
 | [T10](T10-safety-referral.md) | 상담 안내 + 판정 필드 부재 | 대기 | #12 | |
 | [T11](T11-limits-cleanup.md) | 운영 보호(한도·대체 결과·자동 삭제) | 대기 | #13 | |

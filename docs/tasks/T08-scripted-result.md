@@ -1,6 +1,6 @@
 # T08 가짜 분석기 + 결과 API
 
-- 단계: 2단계 가짜 분석 · 예정: 11/22 오전 · 상태: 계획 확인 · 이슈: #10 · PR: 없음
+- 단계: 2단계 가짜 분석 · 예정: 11/22 오전 · 상태: PR · 이슈: #10 · PR: #42
 
 ## 범위
 
@@ -9,7 +9,7 @@
 - `GET /cases/{id}/result`(계약 4.11), `isStale`, `summary`
 - scripted 결과에도 초안 `section`과 `TOOL_CALL` 조회 이유(`summary`)를 넣는다(계약 v0.5, `docs/agent-design.md` 2.4·2.5)
 - 결과·근거 거래·AI 권장 체크리스트 항목은 가장 최근 성공 실행 것만(계약 v0.6 4.8·4.11)
-- AI 권장 항목은 고정 목록(계약 4.2)에 이미 있는 `docType`만 받는 항목이면 코드가 거른다(같은 서류가 두 번 나오지 않게)
+- AI 권장 항목은 서류 종류로 거르지 않는다. 한 실행당 최대 3개, 고정 항목이 받는 `docType`으로는 자동 충족되지 않는다(11/22 결정, 계약 v0.6.5 4.8)
 
 ## 제외
 
@@ -35,7 +35,7 @@
 | `app/models/transaction.py` | `Transaction`(ERD 3.4) |
 | `app/models/checklist.py` | `analysis_run_id`에 FK(ON DELETE CASCADE) |
 | `app/services/results.py` | 출력 저장(근거를 **이 사건의 증빙·이번 실행의 거래**에만 연결), 결과 응답 만들기, 요약 계산 |
-| `app/services/checklist.py` | 가장 최근 성공 실행의 `AI_RECOMMENDED` 항목을 더함. 고정 목록에 이미 있는 `docType`만 받는 권장 항목은 거름 |
+| `app/services/checklist.py` | 가장 최근 성공 실행의 `AI_RECOMMENDED` 항목을 더함. 고정 항목이 받는 `docType`은 AI 권장 항목 충족에 세지 않음 |
 | `app/schemas/result.py` | `ResultResponse`, `Finding`, `FindingSource`(종류별 필드), `Summary` |
 | `app/api/result.py` | `GET /cases/{id}/result` |
 | `tests/test_t08_result.py` | 아래 테스트 |
@@ -100,7 +100,7 @@
 
 ### 정할 것
 
-1. **`UNEXPECTED`의 "AI 권장: 신고 내역"은 AI 권장 항목으로 내지 않는다.** 고정 목록에 이미 `INCIDENT_REPORT`(피해 신고 기록, `OTHER`)가 있어 "고정 목록과 같은 `docType`이면 거른다" 규칙에 걸리고, 탭 B에 같은 서류가 두 번 나오게 된다. 대신 u4(`STATEMENT_ONLY`)의 note를 "사연에만 있고 신고 기록이 없습니다. 탭 B의 피해 신고 기록을 확인해 주세요."로 둔다. 계약 4.3.1 표 문구만 고친다(v0.6.4, 응답 모양 변경 없음)
+1. **`UNEXPECTED`의 "AI 권장: 신고 내역"은 AI 권장 항목으로 내지 않는다.** 고정 목록에 이미 `INCIDENT_REPORT`(피해 신고 기록, `OTHER`)가 있어 탭 B에 같은 서류가 두 번 나오게 된다. 대신 u4(`STATEMENT_ONLY`)의 note를 "사연에만 있고 신고 기록이 없습니다. 탭 B의 피해 신고 기록을 확인해 주세요."로 둔다. 계약 4.3.1 표 문구만 고친다(v0.6.4, 응답 모양 변경 없음)
 2. **가짜 분석기는 샘플이 아닌 사건에도 입금 유형별 고정 결과를 낸다.** FE가 직접 만든 사건으로도 결과 화면을 붙일 수 있게. 실제 서류 내용과는 무관한 결과라 `GET /health`의 `agent: scripted`로 구분한다
 3. **T12 합성 서류는 이 고정값에 맞춰 만든다:** 대화내역 1쪽 12번 줄 "3개 12만원에 할게요", 거래 행 금액·날짜·상대방(위 표)
 4. 대체 결과(T11)는 이 시나리오 결과를 그대로 쓴다(계약 7절)
@@ -108,6 +108,16 @@
 ## 결정
 
 - 11/21 사용자 승인: 계획, 계약 테스트 8·9와 T08-a~d, 정할 것 1~4(추천대로). 1의 계약 문구(v0.6.4)는 이슈 #40에서 먼저 고침. T08은 finding `note`·step `summary`를 항상 문장으로 채운다(FE 타입이 null을 받지 않음, #40 대조)
+- 11/22 사용자 결정: AI 권장 항목을 `docType`으로 거르지 않는다. `UNEXPECTED`는 고정 항목이 `CHAT`·`TRANSACTION_RECORD`·`OTHER`를 모두 받아 그 규칙이면 AI 권장이 전부 걸러지기 때문. 대신 ① 같은 서류를 권하지 않게 T16 프롬프트에 고정 목록을 넣고 ② 고정 항목이 받는 `docType`으로는 AI 권장 항목이 자동 충족되지 않게(`MISSING`, 사용자가 "따로 준비함") ③ 한 실행당 최대 3개. 계약 v0.6.5
 
 ## 결과
 
+- 11/22 구현 완료. `uv run python -m pytest -q` → 73 passed(T08 9개 추가), `uv run ruff check .` 통과
+- 실제 서버(8099, 임시 SQLite, 단계 사이 1초)로 test02 확인: 단계가 1초마다 넘어감, step 7개(OCR 2·TOOL_CALL 2·FINDING·CONFLICT·DRAFT), 결과 CONFLICT(DATE) 1·MATCH 2·STATEMENT_ONLY 1, 탭 B `INCIDENT_REPORT` MISSING
+- 계획과 달라진 것
+  - 분석기 단계 함수가 출력 `out`을 함께 받는다(`extract(ctx, rec, out)` 등). `runner.execute`가 출력을 돌려주고, 서비스가 실행을 `SUCCEEDED`로 바꾸는 **같은 커밋**에 저장한다(그사이 시간 초과로 끝났으면 결과도 버림)
+  - 자료 근거(서류·거래)가 하나도 남지 않은 `MATCH`뿐 아니라 `CONFLICT`도 `UNKNOWN`으로 바꾼다(어긋남을 보여 줄 자료가 없으므로)
+  - ERD v1.2: `finding_sources.seq` 추가, 서류를 지우면 그 서류의 거래 행·근거도 지움(CASCADE), `checklist_items.analysis_run_id` FK
+  - AI 권장 항목 규칙(계약 v0.6.5): 서류 종류로 거르지 않음, 최대 3개, 고정 항목이 받는 `docType`으로는 자동 충족 안 됨. 테스트 2개 추가(계약 테스트 아님)
+  - DRAFT step 문구는 T09 전까지 "초안 작성 기능은 준비 중입니다."
+- 주의: 기존 로컬 `proofy.sqlite3`는 `checklist_items`에 새 FK가 없다(테이블을 다시 만들지 않음). 지우고 다시 만들 것

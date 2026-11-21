@@ -1,4 +1,4 @@
-# Proofy FE–BE API 계약 v0.6.4
+# Proofy FE–BE API 계약 v0.6.5
 
 - 작성일: 2026-11-21 · 상태: **BE 결정 반영, FE 확인 후 "합의됨"으로 바꾼다**
 - 화면 기준: `docs/screen-flow.md`(흐름 화면 6개 + 체험 계정 선택·내 사건) · 데이터 기준: `docs/erd.md` · AI 흐름: `docs/agent-design.md`
@@ -194,7 +194,7 @@
 - `THREAT_MESSAGE.note`: "협박 문자가 없으면 이의제기가 받아들여지기 어렵다는 보도가 있습니다. 받은 메시지는 지우지 말고 캡처해 두세요." (머니투데이 2025.12.1)
 - `INCIDENT_REPORT.note`: "내가 피해를 입었다는 것을 보여 주는 기록입니다. 신고했다면 접수증이나 사건사고사실확인원을 받아 두세요." 공식 근거를 찾으면 `TYPE_GUIDE`로 올린다.
 - 이 항목의 서류는 v0.4 FE와 맞추려고 새 `DocType`을 만들지 않고 `OTHER`로 받는다. 그래서 이 사건에 `OTHER` 서류가 하나라도 있으면 충족(`SATISFIED`)으로 계산한다.
-- 이 유형은 공식 서류 목록을 확인하지 못했다. 그래서 위 세 항목 외에는 AI가 사연을 보고 `AI_RECOMMENDED` 항목(예: 은행 상담 기록, 입금자에게 반환을 제안한 기록)을 더한다.
+- 이 유형은 공식 서류 목록을 확인하지 못했다. 그래서 위 세 항목 외에는 AI가 사연을 보고 `AI_RECOMMENDED` 항목(예: 은행 상담 기록, 입금자에게 반환을 제안한 기록)을 더한다. 이 항목들은 고정 항목과 같은 서류 종류(`CHAT`·`OTHER`)를 받으므로, 협박 문자를 올렸다고 자동으로 충족되지 않는다(4.8 규칙).
 
 - `acceptedDocTypes`가 여러 개면 **그중 하나만 있어도 충족**이다. 업로드 화면에서 항목을 누르면 `acceptedDocTypes`의 첫 값을 기본 `docType`으로 쓰고, 여러 개면 고르게 한다.
 - `requiredForAnalysis: true`는 **AI 분석에 필요한 서류**라는 뜻이고, 법령·기사상 제출 의무와는 별개다. 항목 옆에 "AI 분석에 필요" 배지를 붙인다. 모든 유형에서 거래내역서 한 항목만 `true`다.
@@ -405,6 +405,7 @@
 
 - `status`는 서버가 올린 서류로 계산한다. `checked`는 사용자가 "따로 준비함"을 누른 표시이고 `status`와 별개다.
 - `missingCount` = `status == MISSING` 이면서 `checked == false`인 항목 수.
+- `AI_RECOMMENDED` 항목(한 실행당 최대 3개)의 `status`도 올린 서류로 계산하지만, **같은 사건의 고정 항목이 이미 받는 `docType`은 세지 않는다.** 예: test02에서 "반환을 제안한 대화"(`CHAT`)는 협박 문자(`CHAT`, `THREAT_MESSAGE`)를 올려도 `MISSING`이다. 이런 항목은 사용자가 "따로 준비함"(`checked`)으로 표시한다. 서류 종류가 겹친다고 AI 권장 항목을 지우지는 않는다(고정 목록과 같은 서류를 권하지 않는 것은 AI 지시로 막는다).
 
 #### `PATCH /cases/{caseId}/checklist/{itemId}` `{ "checked": true }` → `200 { "item": {…} }`
 
@@ -683,6 +684,7 @@ FE는 1.5초마다 부르고 `status`가 `RUNNING`이 아니면 멈춘다. 180�
 | 2026-11-21 | 0.2 | ① 사건은 화면 2 "다음"에서 생성 확정(사연은 화면 3에서 `PATCH`) ② `COMPARING` 문구를 "거래내역과 대조 중"으로, FE는 `stages[].label`만 표시 ③ 요구 서류에 `requiredForAnalysis` 추가, 거래내역서를 분석 시작 조건으로(`422`의 `details.missing`) |
 | 2026-11-21 | 0.3 | 외부 검토 반영. ① 초안: `CONFLICT` 연결 문장 자동 확인 필요, 진술 값 일치 시 서버가 연결, `warnings`, 문장별 `confirmed`·`unconfirmedCount`, 복사·PDF 전 확인창 ② 개인정보 보장 항목·`demoMode`·합성 데이터 안내 ③ `POST /cases/sample`, `GET /samples` 샘플 체험 ④ 일정에 리허설·소개서·제출(업로드+이메일) ⑤ `ANALYSIS_INPUT` 분류 신설, 물품 거래는 사업자 판매 대금 전제·예시를 청년 1인 판매 사업자로 ⑥ IP당 사건 생성 제한, `DAILY_LIMIT` ⑦ 미래 날짜 400 ⑧ 분석 시작에 `narrative` 동봉 ⑨ CORS 허용 헤더 |
 | 2026-11-21 | 0.4 | 체험 계정·마이페이지. ① L 체험 계정 선택(test01 `GOODS`, test02 `UNEXPECTED`), M 내 사건 화면 추가, 서버 인증은 그대로 ② localStorage `proofy.case` 한 건 → `proofy.cases` 배열 ③ `UNEXPECTED` 화면 노출, 유형별 항목(`THREAT_MESSAGE`, `UNKNOWN_DEPOSIT_RECORD`), 샘플 시나리오 추가, `SALARY` 샘플은 P1 ④ `case.sampleScenario` 추가 ⑤ 샘플 사건은 AI 실패·하루 한도 초과 때 미리 만든 결과로 끝남(`result.precomputed`, step `FALLBACK`) ⑥ 상담 안내 검사: 통장 대여·송금 대행 표현이 사연에 있으면 초안 대신 `result.referral`(step `SAFETY`) |
+| 2026-11-22 | 0.6.5 | 4.8: `AI_RECOMMENDED` 항목은 한 실행당 최대 3개, 고정 항목이 받는 `docType`으로는 자동 충족되지 않음(`MISSING`, 사용자가 `checked`로 표시). 4.2 `UNEXPECTED`에 같은 설명. 응답 모양 변경 없음 |
 | 2026-11-22 | 0.6.4 | FE 코드(타입·목 서버)와 대조해 정하지 않았던 곳을 명시(이슈 #40). ① 4.4·5절: 공고일을 모를 때 `deadline.basis`는 `null`이 아니라 문장(FE가 이미 문장으로 처리) ② 4.1 `dailyUsage`를 지금부터 실제로 준다(오늘 외부 AI를 부른 분석 수, 한도 `DAILY_ANALYSIS_LIMIT`). 한도 초과 429는 그대로 ③ 4.7 `lowConfidenceRegions`는 정수 또는 `null`(FE 타입 `unknown[]`은 `number`로, 지금은 항상 `null`) ④ 4.3.1 test02: "바로 은행에 알렸다"는 AI 권장 항목이 아니라 고정 항목 `INCIDENT_REPORT`로 보인다(탭 B에 같은 서류가 두 번 나오지 않게). **FE 코드 수정 없이 동작한다** |
 | 2026-11-21 | 0.6.3 | 4.3.1 설명 보충: 샘플 사건 날짜 규칙(통지일·공고일만 상대, 입금일·사연·서류 날짜 고정), `SALARY` 샘플은 준비 전까지 400, 서류는 사건마다 복사본. 응답 모양 변경 없음 |
 | 2026-11-21 | 0.6.2 | ① 4.2에 `OTHER` 유형 목록과 "문구가 없는 항목의 `note`는 `null`" 규칙 ② 4.8 예시의 `TRADE_DOCUMENT.note`를 `null`로(사건별 문구는 AI 권장 항목·탭 A가 맡음). 서버 응답 모양 변경 없음 |
