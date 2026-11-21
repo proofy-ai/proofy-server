@@ -6,7 +6,7 @@
 - v1.2(2026-11-22, T08): `finding_sources.seq`(근거 화면 순서) 추가, 서류를 지우면 그 서류에서 나온 거래 행·근거도 함께 지움(ON DELETE CASCADE, 결과는 `isStale`), AI 권장 항목 상한 3개와 충족 계산 규칙
 - v1.3(2026-11-22, T09): `drafts.edited_at`(사용자가 저장한 적 있음 → 다시 분석 시 `DRAFT_HAS_EDITS`)
 - DB: 로컬 SQLite, 배포 Postgres. UUID는 문자열(36자), JSON은 SQLAlchemy `JSON` 타입(둘 다 동작), 시각은 UTC로 저장
-- 테이블 생성: 서버 시작 시 생성. 배포 때(T18) Alembic 도입
+- 테이블 생성: 서버 시작 시 생성. Alembic은 미룸(11/22, T22). 표가 바뀌면 배포 DB 표를 지우고 다시 만든다(합성 데이터)
 
 ## 1. 원칙
 
