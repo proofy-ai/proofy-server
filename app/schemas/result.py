@@ -6,6 +6,7 @@ from typing import Literal
 from app.schemas.checklist import ChecklistResponse
 from app.schemas.common import CamelModel, DocType, UtcDatetime
 from app.schemas.deadline import Deadline
+from app.schemas.draft import DraftOut
 
 FindingStatus = Literal["MATCH", "CONFLICT", "STATEMENT_ONLY", "UNKNOWN"]
 ConflictField = Literal["AMOUNT", "DATE", "COUNTERPARTY", "OTHER"]
@@ -88,7 +89,7 @@ class ResultResponse(CamelModel):
     deadline: Deadline
     findings: list[FindingOut]
     checklist: ChecklistResponse
-    # 초안(T09). 지금은 항상 null
-    draft: dict | None
+    # 초안(4.12와 같은 모양). 상담 안내로 끝난 실행은 null
+    draft: DraftOut | None
     unread_evidence: list[UnreadEvidence]
     summary: ResultSummary

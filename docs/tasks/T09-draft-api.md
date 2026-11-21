@@ -1,6 +1,6 @@
 # T09 초안 API
 
-- 단계: 2단계 가짜 분석 · 예정: 11/22 오후 · 상태: 구현 계획 확인 대기 · 이슈: #11 · PR: 없음
+- 단계: 2단계 가짜 분석 · 예정: 11/22 오후 · 상태: 완료 · 이슈: #11 · PR: 없음
 
 ## 범위
 
@@ -22,7 +22,7 @@
 
 | # | 내용 | 파일 |
 |---|---|---|
-| 1 | `drafts` 테이블(ERD 3.9 그대로, 사건당 1행) | `app/models/draft.py`, `app/models/__init__.py` |
+| 1 | `drafts` 테이블(ERD 3.9, 사건당 1행). "저장한 적 있음"을 위해 `edited_at` 추가(ERD v1.3) | `app/models/draft.py`, `app/models/__init__.py` |
 | 2 | 가짜 분석기가 초안 문장을 만든다. 분석기 출력에 `draft_sentences`(묶음, 글, 연결할 대조 항목 번호) 추가. `GOODS`는 계약 4.12 예시 문장, `UNEXPECTED`는 세 묶음(피해 경위 포함), 그 밖은 사연 기반 짧은 문장. 4번 화면 `DRAFT` 단계 문구를 "초안 문장 N개 작성"으로 | `app/agent/output.py`, `app/agent/scripted.py` |
 | 3 | 저장할 때 서버가 확인 필요 규칙 적용(아래) | `app/services/drafts.py`(새), `app/services/results.py` |
 | 4 | `GET /cases/{id}/draft`: 가장 최근 성공 실행의 초안. 없으면 `404 NOT_FOUND`. `unconfirmedCount`·`fullText`는 읽을 때 계산 | `app/api/draft.py`(새), `app/schemas/draft.py`(새) |
@@ -30,7 +30,6 @@
 | 6 | 결과 API(`GET /result`)의 `draft`와 `summary.sentencesNeedingCheck` 채우기 | `app/services/results.py` |
 | 7 | 다시 분석: 고친 초안이 있으면 `409 DRAFT_HAS_EDITS`, `overwriteEditedDraft: true`면 새 초안으로 덮기(지금은 항상 "없음"인 자리) | `app/services/analysis.py` |
 | 8 | **샘플 서류를 "내려받기"(`Content-Disposition: attachment`)로.** FE와 BE 출처가 달라 `<a download>`가 무시되고 같은 탭이 파일로 바뀌던 문제(11/22 사용자 확인). T06 결정 변경 기록 | `app/api/samples.py`, `docs/tasks/T06-sample-cases.md` |
-| 9 | 계약 v0.7.2: 아래 "정할 것" 1·3·4를 문장으로 명시, 4.3.1 샘플 파일이 내려받기로 온다는 한 줄. 응답 모양 변경 없음 | `docs/contract.md` |
 
 ### 확인 필요 규칙(서버, 계약 4.12)
 
@@ -62,5 +61,15 @@
 
 ## 결정
 
+- 11/22 사용자: "기존 계약대로 완성한 뒤 개선안은 FE와 토의". 계약 문서(v0.6.5)와 응답 모양을 바꾸지 않는다. 계획 표의 "계약 v0.7.2"는 뺐다. 계약 테스트 T09-a~d는 이 지시로 진행
+- 정할 것 1~5는 추천안대로(모두 계약 문장의 해석 범위): ① 글이 바뀐 문장은 같은 요청에 `confirmed: true`가 있을 때만 `true` ② 다시 분석해도 `version`은 이어서 +1 ③ `PUT`으로 한 번이라도 저장한 초안 = `DRAFT_HAS_EDITS` ④ 없는 `sentenceId`·중복·빈 글은 `400 VALIDATION_ERROR`(계약 1.1 "필드 형식·필수값 오류") ⑤ 2시간
+- 문장 ID는 UUID(계약 1절 "ID 전부 UUID", 예시의 `s1`은 줄임)
+- `summary.sentencesNeedingCheck` = `needsCheck: true` 문장 수(확인 여부와 무관). 확인 안 한 수는 `draft.unconfirmedCount`
+- "저장한 적 있음"은 `drafts.edited_at`(ERD v1.3)으로 판단. `utc_now()`가 초 단위라 `updated_at`·`created_at` 비교로는 구분이 안 된다
+
 ## 결과
 
+- 구현: `app/models/draft.py`(ERD v1.3 `edited_at`), `app/services/drafts.py`(확인 필요 규칙·GET·PUT·다시 분석 판단), `app/api/draft.py`, `app/schemas/draft.py`. 가짜 분석기가 초안 문장을 낸다(GOODS 3문장·2묶음, UNEXPECTED 5문장·3묶음, 그 밖 2문장). 결과 API의 `draft`·`summary.sentencesNeedingCheck` 채움. `DRAFT_HAS_EDITS` 연결. 샘플 서류는 `attachment`
+- 계약 문서·응답 모양 변경 없음(v0.6.5 그대로). ERD v1.3(`drafts.edited_at`)
+- 테스트: `tests/test_t09_draft.py`(T09-a~d + 동작 확인 7개). T08 테스트의 `draft is None` 단정을 `is not None`으로. `uv run python -m pytest -q` → 99 passed(3회), `uv run ruff check .` 통과
+- 미검증: 실제 서버·FE 화면 연동(탭 C·6번 확인창), Postgres에서 `drafts` 테이블 생성

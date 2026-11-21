@@ -30,7 +30,8 @@ def list_samples() -> SamplesResponse:
 @router.get("/samples/{scenario_key}/{file_name}")
 def download_sample(scenario_key: str, file_name: str) -> FileResponse:
     path, mime = sample_service.sample_file(scenario_key, file_name)
-    # FE가 미리보기로 띄울 수 있게 inline(브라우저에서 바로 열림)
+    # 내려받기(attachment). FE와 출처가 달라 <a download>가 무시되므로 서버가 정한다
+    # (T09에서 inline → attachment)
     return FileResponse(
-        path, media_type=mime, filename=file_name, content_disposition_type="inline"
+        path, media_type=mime, filename=file_name, content_disposition_type="attachment"
     )

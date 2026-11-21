@@ -71,7 +71,7 @@ T00 규칙
 |---|---|---|---|---|
 | [T07](T07-analysis-runs.md) | 분석 실행·진행 | 완료 | #9 | #39 |
 | [T08](T08-scripted-result.md) | 가짜 분석기 + 결과 API | 완료 | #10 | #42 |
-| [T09](T09-draft-api.md) | 초안 API | 대기 | #11 | |
+| [T09](T09-draft-api.md) | 초안 API | 완료 | #11 | |
 | [T10](T10-safety-referral.md) | 상담 안내 + 판정 필드 부재 | 대기 | #12 | |
 | [T11](T11-limits-cleanup.md) | 운영 보호(한도·대체 결과·자동 삭제) | 대기 | #13 | |
 
@@ -110,6 +110,10 @@ T00 규칙
 | 5 | 오류 응답 모양이 같음, 토큰 없음·불일치 401, 없는 사건 404 | T03 |
 | 6 | 체험 계정 사건이 서류가 채워진 채 생기고 바로 분석 가능한 상태 | T06 |
 | 7 | 사건 A의 토큰으로 사건 B를 조회·수정·삭제하면 막힘 | T03 |
+| T09-a | GOODS 초안 응답 모양, 묶음 순서, 진술 값("150,000원")으로 `CONFLICT` 자동 연결, `NO_SOURCE`, `unconfirmedCount`, `fullText` 묶음 사이 빈 줄 | T09 |
+| T09-b | `PUT`: 글 바꾸면 `edited`·`confirmed` 규칙, 새 문장 `USER`, 빠진 문장 삭제, `version` +1, `409 VERSION_CONFLICT`·`currentVersion` | T09 |
+| T09-c | 저장한 초안이 있으면 다시 분석 `409 DRAFT_HAS_EDITS`, `overwriteEditedDraft`면 새 초안(`version` 이어서) | T09 |
+| T09-d | 결과 API `draft`가 `GET /draft`와 같고 `sentencesNeedingCheck` 맞음, 다른 사건 토큰 401 | T09 |
 
 2단계 이후 작업(결과 응답 모양, 판정 필드 부재, 상담 안내, 근거 교차 차단)의 계약 테스트는 그 작업의 구현 계획에서 목록을 제안하고 승인받는다.
 

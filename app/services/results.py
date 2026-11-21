@@ -3,6 +3,7 @@
 - 저장: 분석기 출력(`AnalysisOutput`)을 실행에 붙인다. 근거는 **이 사건의 증빙과 이번 실행의
   거래 행**에만 연결하고, 어긋나면 근거를 빼고 로그를 남긴다(CLAUDE.md 원칙 3).
   인용 대조(`verified`)도 여기서 코드가 한다.
+- 초안은 같은 커밋에 `app/services/drafts.py`가 만든다(확인 필요 규칙).
 - 조회: 가장 최근 성공 실행 것만 준다. 이전 실행의 행은 지우지 않고 조회에서 거른다(ERD 4절).
 """
 
@@ -40,6 +41,7 @@ from app.schemas.result import (
 from app.services.checklist import get_checklist
 from app.services.clock import utc_now
 from app.services.deadline import compute_deadline
+from app.services.drafts import FindingInfo, current_draft, replace_draft, to_draft_out
 from app.services.runs import latest_succeeded_run
 
 logger = logging.getLogger("proofy.results")
@@ -97,8 +99,11 @@ def save_output(db: Session, run: AnalysisRun, out: AnalysisOutput) -> None:
         )
 
     db.flush()
-    for seq, finding in enumerate(out.findings, start=1):
+    saved = [
         _add_finding(db, run, seq, finding, evidence, tx_ids)
+        for seq, finding in enumerate(out.findings, start=1)
+    ]
+    replace_draft(db, run, out.draft_sentences, saved)
 
     for doc in out.recommended[:MAX_RECOMMENDED]:
         db.add(
@@ -124,7 +129,7 @@ def _add_finding(
     finding: Finding,
     evidence: dict[str, Evidence],
     tx_ids: dict[str, str],
-) -> None:
+) -> FindingInfo:
     finding_id = str(uuid.uuid4())
     sources: list[FindingSource] = []
     for source in finding.sources:
@@ -182,6 +187,11 @@ def _add_finding(
     )
     db.flush()
     db.add_all(sources)
+    return FindingInfo(
+        finding_id,
+        status,
+        {"field": conflict.field, "statement": conflict.statement} if conflict else None,
+    )
 
 
 def _source_out(
@@ -278,6 +288,8 @@ def get_result(db: Session, case: Case, today: date) -> ResultResponse:
     counts = {s: 0 for s in STATUSES}
     for f in findings:
         counts[f.status] += 1
+    draft_row = current_draft(db, case, run)
+    draft = to_draft_out(draft_row) if draft_row is not None else None
     return ResultResponse(
         run_id=run.id,
         based_on_input_version=run.based_on_input_version,
@@ -289,13 +301,14 @@ def get_result(db: Session, case: Case, today: date) -> ResultResponse:
         deadline=compute_deadline(case.public_notice_date, today),
         findings=findings,
         checklist=checklist,
-        draft=None,
+        draft=draft,
         unread_evidence=unread,
         summary=ResultSummary(
             finding_counts=counts,
             missing_documents=checklist.missing_count,
-            # 초안(T09)이 채운다
-            sentences_needing_check=0,
+            sentences_needing_check=(
+                sum(1 for s in draft.sentences if s.needs_check) if draft else 0
+            ),
             unread_evidence=len(unread),
         ),
     )

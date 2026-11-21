@@ -13,6 +13,7 @@ from datetime import date, timedelta
 from app.agent.output import (
     AnalysisOutput,
     Conflict,
+    DraftSentence,
     Finding,
     RecommendedDoc,
     Source,
@@ -111,7 +112,14 @@ class ScriptedAnalyzer:
 
     def draft(self, ctx: RunContext, rec: Recorder, out: AnalysisOutput) -> None:
         self._pause(ctx)
-        rec.step("DRAFT", "소명서 초안", "초안 작성 기능은 준비 중입니다.")
+        if ctx.inflow_type == "GOODS":
+            sentences = _goods_draft()
+        elif ctx.inflow_type == "UNEXPECTED":
+            sentences = _unexpected_draft()
+        else:
+            sentences = _statement_only_draft(out)
+        out.draft_sentences += sentences
+        rec.step("DRAFT", "소명서 초안", f"초안 문장 {len(sentences)}개를 작성했습니다.")
 
     @staticmethod
     def _pause(ctx: RunContext) -> None:
@@ -283,6 +291,67 @@ class ScriptedAnalyzer:
                 sources=(Source("NARRATIVE", quote=sentence),),
             )
         )
+
+
+def _goods_draft() -> list[DraftSentence]:
+    """계약 4.12 예시. 번호는 `_goods`의 대조 항목 순서(0 일치, 1 어긋남, 2 진술만).
+
+    "150,000원" 문장은 어긋난 항목(1)을 일부러 연결하지 않는다.
+    서버가 진술 값을 보고 붙인다(규칙 2).
+    """
+    return [
+        DraftSentence(
+            "DEPOSIT_REASON",
+            "본인은 온라인 쇼핑몰을 운영하는 개인사업자로, 2026년 11월 8일 거래처에 가죽 지갑 "
+            f"3개를 납품하고 그 대금 {_won(150_000)}을 입금받았습니다.",
+            (0,),
+        ),
+        DraftSentence("DEPOSIT_REASON", "판매한 물건은 다음 날 택배로 발송하였습니다.", (2,)),
+        DraftSentence(
+            "NO_INVOLVEMENT",
+            "본인은 이 대금이 범죄와 관련된 돈이라는 사실을 알지 못했으며, "
+            "물건을 판 대가로 받았습니다.",
+        ),
+    ]
+
+
+def _unexpected_draft() -> list[DraftSentence]:
+    """번호는 `_unexpected`의 대조 항목 순서.
+
+    0 입금일 어긋남, 1 그대로 둠, 2 협박 문자, 3 은행에 알림.
+    """
+    return [
+        DraftSentence(
+            "DEPOSIT_REASON",
+            f"2026년 11월 11일 본인이 알지 못하는 사람이 본인 계좌로 {_won(100_000)}을 보냈습니다.",
+            (0,),
+        ),
+        DraftSentence("DEPOSIT_REASON", "입금된 돈은 쓰지 않고 그대로 두었습니다.", (1,)),
+        DraftSentence(
+            "NO_INVOLVEMENT",
+            "본인은 돈을 보낸 사람을 알지 못하며, 이 입금이 어떤 돈인지 알지 못했습니다.",
+        ),
+        DraftSentence(
+            "VICTIM_CONTEXT",
+            "이후 '20만 원 보내면 신고 취하해 줄게'라는 문자를 받았으며, 그 문자 화면을 함께 "
+            "제출합니다.",
+            (2,),
+        ),
+        DraftSentence("VICTIM_CONTEXT", "이 사실을 바로 은행에 알렸습니다.", (3,)),
+    ]
+
+
+def _statement_only_draft(out: AnalysisOutput) -> list[DraftSentence]:
+    """급여·기타: 사연 첫 문장(진술만 있는 주장)과 가담하지 않았다는 본인 진술."""
+    sentences = []
+    if out.findings:
+        sentences.append(DraftSentence("DEPOSIT_REASON", f"{out.findings[0].claim}.", (0,)))
+    sentences.append(
+        DraftSentence(
+            "NO_INVOLVEMENT", "본인은 이 입금이 범죄와 관련된 돈이라는 사실을 알지 못했습니다."
+        )
+    )
+    return sentences
 
 
 _STATUS_WORDS = {
