@@ -53,7 +53,7 @@ tests/
 5. `dev` 대상 PR, 본문에 `Closes #이슈번호`. 작업 파일의 "결과"와 `docs/tasks/README.md` 상태를 갱신한다
 - 이슈·PR 본문은 `.github/`의 템플릿(작업·버그 이슈, PR)을 따른다. `gh`로 만들 때도 같은 항목을 채운다
 - 한 작업은 1~2시간 크기로 유지한다. 커지면 나눠서 작업을 추가한다
-- `main`은 제출용이다. 제출 전에 `dev`를 `main`으로 합친다
+- 레포 기본 브랜치는 `dev`다(이슈·PR 템플릿과 `Closes #`가 `dev` 기준으로 동작). `main`은 제출용이고, 제출 전에 `dev`를 `main`으로 합친다
 - 커밋 메시지: `feat:` `fix:` `docs:` `refactor:` `test:` `chore:` + 한국어 요약
 - 커밋·PR에 AI 작성 표시(Co-Authored-By, Generated with …)를 넣지 않는다
 
