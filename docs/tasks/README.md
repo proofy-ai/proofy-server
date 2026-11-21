@@ -83,7 +83,7 @@ T00 규칙
 | [T12](T12-synthetic-documents.md) | 합성 샘플 서류 | 완료 | #14 | #50 |
 | [T13](T13-text-extraction.md) | 글자 추출(텍스트 PDF, OCR) | 완료 | #15 | #51 |
 | [T14](T14-masking.md) | 개인정보 마스킹 | 완료 | #16 | #54 |
-| [T15](T15-transaction-rows.md) | 거래 행 추출 | 완료 | #17 | (PR 번호) |
+| [T15](T15-transaction-rows.md) | 거래 행 추출 | 완료 | #17 | #55 |
 | [T16](T16-compare-agent.md) | 대조 에이전트 | 대기 | #18 | |
 | [T17](T17-draft-verify.md) | 초안 작성 + 후검증 | 대기 | #19 | |
 
