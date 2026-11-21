@@ -1,5 +1,7 @@
 # 참고 자료(다른 프로젝트 소스, 대회 배포 문서, 기획 초안)는 레포에 올리지 않는다
 etc/
+# FE 레포 사본(대조용). FE는 proofy-ai/proofy-fe에 따로 있다
+proofy-fe-main/
 
 # 비밀값
 .env
