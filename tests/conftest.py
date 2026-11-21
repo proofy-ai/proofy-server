@@ -15,6 +15,8 @@ def settings(tmp_path) -> Settings:
         database_url=f"sqlite:///{tmp_path / 'test.sqlite3'}",
         agent_llm="scripted",
         demo_mode=True,
+        # 가짜 분석의 단계 간 쉬는 시간 없이 바로 끝나게
+        scripted_stage_delay_seconds=0,
     )
 
 
