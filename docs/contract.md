@@ -1,7 +1,7 @@
 # Proofy FE–BE API 계약 v0.4
 
 - 작성일: 2026-11-21 · 상태: **BE 결정 반영, FE 확인 후 "합의됨"으로 바꾼다**
-- 화면 기준: `docs/screen-flow.md`(흐름 화면 6개 + 체험 계정 선택·내 사건) · 데이터 기준: `docs/erd-review.md` · AI 흐름: `docs/agent-design.md`
+- 화면 기준: `docs/screen-flow.md`(흐름 화면 6개 + 체험 계정 선택·내 사건) · 데이터 기준: `docs/erd.md` · AI 흐름: `docs/agent-design.md`
 - 서버 실행 중 실제 스키마는 `GET /docs`(FastAPI OpenAPI)에서 확인한다. **이 문서와 OpenAPI가 다르면 이 문서가 정본**이고, 서버를 고친다.
 
 ## 0. 합의 규칙과 일정

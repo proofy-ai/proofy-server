@@ -10,7 +10,8 @@ Proofy 서버: 지급정지된 계좌 명의인(청년)이 은행에 낼 이의�
 - `docs/contract.md`: FE–BE API 계약 **정본**. 구현과 다르면 구현을 고친다. 계약을 바꿀 때는 이 파일을 먼저 고치고 변경 이력에 적는다
 - `docs/screen-flow.md`: 화면(흐름 6개 + 체험 계정 선택·내 사건)과 사용자 흐름
 - `docs/agent-design.md`: AI 에이전트 구조와 판단 근거
-- `docs/erd-review.md`: 데이터 모델 결정
+- `docs/erd.md`: 데이터 모델(ERD) **정본**. 테이블·컬럼을 바꿀 때는 이 파일을 먼저 고친다
+- `docs/erd-review.md`: ERD 초안을 검토하며 내린 결정의 이유
 
 ## 실행 명령
 - 설치 `uv sync` · 서버 `uv run python -m uvicorn app.main:app --reload` · 테스트 `uv run python -m pytest` · 린트 `uv run ruff check .`
