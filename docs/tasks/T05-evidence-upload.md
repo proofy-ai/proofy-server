@@ -1,6 +1,6 @@
 # T05 증빙 업로드
 
-- 단계: 1단계 사건·증빙 · 예정: 11/21 밤 · 상태: 계획 확인 · 이슈: #7 · PR: 없음
+- 단계: 1단계 사건·증빙 · 예정: 11/21 밤 · 상태: 완료 · 이슈: #7 · PR: 없음
 
 ## 범위
 
@@ -65,5 +65,15 @@
 
 ## 결정
 
+- 11/21 사용자 승인: 계획과 테스트 T05-a~c
+- 11/21 `python-multipart` 0.0.34 추가(`uv add`)
+- 11/21 증빙 `created_at`은 마이크로초까지 저장해 올린 순서를 지킨다(응답은 초 단위)
+- 11/21 사건 응답 `evidenceCount`는 조회로 계산(`to_case_out`이 DB 세션을 받도록 바꿈)
+
 ## 결과
+
+- `uv run python -m pytest -q` → 45 passed(T05 5개: 계약 테스트 T05-a~c, 잘못된 `docType` 400·토큰 없음 401, 파일이 DB에 저장되고 이름의 경로가 떨어짐)
+- `uv run ruff check .` → All checks passed, `uv run ruff format --check .` → 이상 없음
+- OpenAPI(`/openapi.json`) 200, 업로드는 `multipart/form-data`
+- 미검증: 브라우저(FE)에서 실제 파일 업로드, Postgres `BYTEA` 저장(T18)
 

@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import cases, checklist, health, meta
+from app.api import cases, checklist, evidence, health, meta
 from app.config import Settings, get_settings
 from app.db import init_db, make_engine, make_session_factory
 from app.errors import register_error_handlers
@@ -42,6 +42,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     api.include_router(health.router)
     api.include_router(meta.router)
     api.include_router(cases.router)
+    api.include_router(evidence.router)
     api.include_router(checklist.router)
     app.include_router(api)
     return app

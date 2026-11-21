@@ -2,5 +2,6 @@
 
 from app.models.case import Case, CaseInflow
 from app.models.checklist import ChecklistItemRow
+from app.models.evidence import Evidence, EvidenceFile
 
-__all__ = ["Case", "CaseInflow", "ChecklistItemRow"]
+__all__ = ["Case", "CaseInflow", "ChecklistItemRow", "Evidence", "EvidenceFile"]

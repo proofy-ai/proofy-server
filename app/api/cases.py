@@ -16,20 +16,20 @@ def create_case(payload: CaseCreate, db: DbSession) -> CaseCreated:
     today = today_kst()
     case, token = case_service.create_case(db, payload, today)
     return CaseCreated(
-        case_id=case.id, case_token=token, case=case_service.to_case_out(case, today)
+        case_id=case.id, case_token=token, case=case_service.to_case_out(db, case, today)
     )
 
 
 @router.get("/cases/{case_id}", response_model=CaseEnvelope)
-def get_case(case: AuthorizedCase) -> CaseEnvelope:
-    return CaseEnvelope(case=case_service.to_case_out(case, today_kst()))
+def get_case(case: AuthorizedCase, db: DbSession) -> CaseEnvelope:
+    return CaseEnvelope(case=case_service.to_case_out(db, case, today_kst()))
 
 
 @router.patch("/cases/{case_id}", response_model=CaseEnvelope)
 def patch_case(patch: CasePatch, case: AuthorizedCase, db: DbSession) -> CaseEnvelope:
     today = today_kst()
     case = case_service.update_case(db, case, patch, today)
-    return CaseEnvelope(case=case_service.to_case_out(case, today))
+    return CaseEnvelope(case=case_service.to_case_out(db, case, today))
 
 
 @router.delete("/cases/{case_id}", status_code=204)

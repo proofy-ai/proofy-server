@@ -11,6 +11,7 @@ from app.errors import ApiError
 from app.models import Case, ChecklistItemRow
 from app.schemas.checklist import ChecklistItem, ChecklistResponse, ChecklistStatus
 from app.services.clock import utc_now
+from app.services.evidence import list_evidence
 from app.services.requirements import Requirement, requirements_for
 
 
@@ -31,8 +32,8 @@ def compute_status(
 
 
 def uploaded_evidence(db: Session, case: Case) -> list[UploadedEvidence]:
-    """사건에 올린 서류. 증빙 테이블은 T05에서 생기므로 지금은 빈 목록이다."""
-    return []
+    """사건에 올린 서류(올린 순서)."""
+    return [UploadedEvidence(e.id, e.doc_type) for e in list_evidence(db, case.id)]
 
 
 def sync_items(db: Session, case: Case) -> dict[str, ChecklistItemRow]:
