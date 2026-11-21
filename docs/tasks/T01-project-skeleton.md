@@ -1,6 +1,6 @@
 # T01 프로젝트 뼈대
 
-- 단계: 1단계 사건·증빙 · 예정: 11/21 밤 · 상태: PR · 이슈: #3 · PR: 없음
+- 단계: 1단계 사건·증빙 · 예정: 11/21 밤 · 상태: PR · 이슈: #3 · PR: #22
 
 ## 범위
 
@@ -109,4 +109,4 @@ T01에서 실제로 만드는 파일은 `main.py`, `config.py`, `db.py`, `errors
 - `uv run ruff check .` → All checks passed / `uv run ruff format --check .` → 통과
 - `uv run python -m pytest -q` → 4 passed (T01-1 1개, T01-2 3개). 경고 1개: Starlette가 `httpx` 대신 `httpx2`를 권장(동작 영향 없음, 미조치)
 - 서버 수동 확인(`uv run python -m uvicorn app.main:app --port 8765`): `/api/v1/health` → `{"status":"ok","agent":"scripted","demoMode":true}`, CORS 사전 요청에 `access-control-allow-headers`에 `X-Case-Token` 포함, 없는 경로 → `{"error":{"code":"NOT_FOUND",…}}`
-- CI: PR에서 확인(아래에 추가)
+- CI: PR #22에서 GitHub Actions `test` 통과(10초, run 44883055719)
