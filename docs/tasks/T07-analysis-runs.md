@@ -1,6 +1,6 @@
 # T07 분석 실행·진행
 
-- 단계: 2단계 가짜 분석 · 예정: 11/22 오전 · 상태: 계획 확인 · 이슈: #9 · PR: 없음
+- 단계: 2단계 가짜 분석 · 예정: 11/22 오전 · 상태: PR · 이슈: #9 · PR: 없음
 
 ## 범위
 
@@ -69,12 +69,12 @@
 
 | # | 내용 | 승인 |
 |---|---|---|
-| T07-a | 샘플 사건 분석 시작 202 `{runId, status: RUNNING, stage}` → 폴링 → `SUCCEEDED`·`FINISHED`, `stages` 3개 순서·라벨·모두 `DONE`, `finishedAt` 값 있음, 사건 `status=REVIEW_READY`·`latestRun`·`hasResult: true` | 승인 필요 |
-| T07-b | 사전 조건 422: 사연 짧음 → `missing: [NARRATIVE]`, 거래내역서 없음 → `[TRANSACTION_RECORD]`, 둘 다 → 둘 다 | 승인 필요 |
-| T07-c | `narrative` 동봉: 같은 값이면 `inputVersion` 그대로, 다른 값이면 저장·+1, 20자 미만을 보내면 저장된 뒤 422 | 승인 필요 |
-| T07-d | 실행 중 다시 시작 → 409 `ANALYSIS_IN_PROGRESS`, `details.runId`가 실행 중인 것(테스트에서 멈춰 있는 분석기를 끼움) | 승인 필요 |
-| T07-e | 마감 초과 → `FAILED`, `error.code=AGENT_TIMEOUT`, 사건 `ERROR`(테스트에서 마감을 짧게) | 승인 필요 |
-| T07-f | 다른 사건의 `runId`로 조회 → 404 `NOT_FOUND`, 분석 시작마다 `usage_events`에 `ANALYSIS_RUN` 1행 | 승인 필요 |
+| T07-a | 샘플 사건 분석 시작 202 `{runId, status: RUNNING, stage}` → 폴링 → `SUCCEEDED`·`FINISHED`, `stages` 3개 순서·라벨·모두 `DONE`, `finishedAt` 값 있음, 사건 `status=REVIEW_READY`·`latestRun`·`hasResult: true` | 11/21 승인됨 |
+| T07-b | 사전 조건 422: 사연 짧음 → `missing: [NARRATIVE]`, 거래내역서 없음 → `[TRANSACTION_RECORD]`, 둘 다 → 둘 다 | 11/21 승인됨 |
+| T07-c | `narrative` 동봉: 같은 값이면 `inputVersion` 그대로, 다른 값이면 저장·+1, 20자 미만을 보내면 저장된 뒤 422 | 11/21 승인됨 |
+| T07-d | 실행 중 다시 시작 → 409 `ANALYSIS_IN_PROGRESS`, `details.runId`가 실행 중인 것(테스트에서 멈춰 있는 분석기를 끼움) | 11/21 승인됨 |
+| T07-e | 마감 초과 → `FAILED`, `error.code=AGENT_TIMEOUT`, 사건 `ERROR`(테스트에서 마감을 짧게) | 11/21 승인됨 |
+| T07-f | 다른 사건의 `runId`로 조회 → 404 `NOT_FOUND`, 분석 시작마다 `usage_events`에 `ANALYSIS_RUN` 1행 | 11/21 승인됨 |
 
 ### 정할 것
 
@@ -84,5 +84,13 @@
 
 ## 결정
 
+- 11/21 사용자 승인: 계획, 테스트 T07-a~f, `usage_events`를 T07에서 만듦(ERD 7절 함께 수정), 실행 중 확인은 프로세스 안 잠금
+
 ## 결과
+
+- `uv run python -m pytest -q` → 59 passed(3회 연속). T07 8개: T07-a 시작→완료·stages·latestRun, T07-b 422 세 경우, T07-c 사연 동봉, T07-d 실행 중 409, T07-e 마감 초과, T07-f 다른 사건 404·usage_events
+- `uv run ruff check .` → All checks passed, `uv run ruff format --check .` → 이상 없음
+- 구조: `agent/runner.py`(분석기 선택·단계 진행, DB 안 만짐) → `services/analysis.py`의 `DbRecorder`가 step을 바로 커밋. 실행 끝내기는 `status='RUNNING'` 조건 UPDATE라 시간 초과 처리와 겹쳐도 한쪽만 반영
+- 분석기는 아직 빈 분석기(`EmptyAnalyzer`)라 steps가 비어 있다. T08에서 가짜 분석기로 바꾼다
+- 미검증: 서버 재시작으로 스레드가 사라진 실행의 조회 시 시간 초과 처리(코드 경로는 T07-e와 같지만 재시작 상황은 직접 돌리지 않음). 사건 삭제 중 실행 중인 스레드가 조용히 멈추는지(`RunStopped`)
 

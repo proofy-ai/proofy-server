@@ -355,7 +355,7 @@ erDiagram
 
 저장하지 않는 것: `unconfirmedCount`, `fullText`(읽을 때 계산). 상담 안내(`referral_json`)가 있는 실행은 초안을 만들지 않고, 그 실행이 성공하면 이 사건의 `drafts` 행을 지운다(계약 4.11: 이때 `GET /draft`는 404).
 
-### 3.10 `usage_events` — 사용량 로그 (T11, 비용은 T16·T19)
+### 3.10 `usage_events` — 사용량 로그 (T07 기록, T11 한도, 비용은 T16·T19)
 
 한도와 비용을 사건과 분리해서 센다. **사건과 FK로 묶지 않는다**(사건을 지워도 남는다). 개인정보가 없다.
 
@@ -438,7 +438,7 @@ stateDiagram-v2
 | T03 사건 API | `cases`, `case_inflows` |
 | T04 서류 목록·체크리스트 | `checklist_items` |
 | T05 증빙 업로드 | `evidence`, `evidence_files` |
-| T07 분석 실행 | `analysis_runs` |
+| T07 분석 실행 | `analysis_runs`, `usage_events`(기록만, 한도 계산은 T11) |
 | T08 가짜 분석기 + 결과 | `claim_findings`, `finding_sources`, `transactions`(샘플 시나리오 고정 행) |
 | T09 초안 API | `drafts` |
 | T11 운영 보호 | `usage_events` |

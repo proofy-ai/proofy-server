@@ -89,12 +89,12 @@
 
 | # | 내용 | 승인 |
 |---|---|---|
-| 8 | **결과 응답 모양 핵심:** `GOODS` 샘플 분석 → 4.11의 최상위 키 전부, findings 3개(`MATCH`·`CONFLICT`·`STATEMENT_ONLY`), `CONFLICT`의 `conflict = {AMOUNT, "150,000원", "120,000원"}`, 근거 종류별 필드(`TRANSACTION`은 `transactionId`·`amountKrw`·`direction` 등), `summary.findingCounts`가 findings와 일치, 체크리스트에 `AI_RECOMMENDED` 택배 항목 | 승인 필요 |
-| 9 | **사건 간 근거 교차 차단:** 같은 시나리오 샘플 사건 두 개를 분석 → 각 결과의 `evidenceId`·`transactionId`가 모두 자기 사건 것 | 승인 필요 |
-| T08-a | 분석 전 결과 조회 404 `NOT_FOUND` | 승인 필요 |
-| T08-b | 두 번 분석 → 결과·AI 권장 항목이 두 번째 실행 것만(권장 항목이 겹쳐 2개가 되지 않음) | 승인 필요 |
-| T08-c | 분석 뒤 사연 수정 → `isStale: true`, 고친 사연의 인용은 다시 분석하면 `verified: false` | 승인 필요 |
-| T08-d | `UNEXPECTED` 샘플 → `DATE` 충돌 1건, `MATCH` 2건, `STATEMENT_ONLY` 1건 | 승인 필요 |
+| 8 | **결과 응답 모양 핵심:** `GOODS` 샘플 분석 → 4.11의 최상위 키 전부, findings 3개(`MATCH`·`CONFLICT`·`STATEMENT_ONLY`), `CONFLICT`의 `conflict = {AMOUNT, "150,000원", "120,000원"}`, 근거 종류별 필드(`TRANSACTION`은 `transactionId`·`amountKrw`·`direction` 등), `summary.findingCounts`가 findings와 일치, 체크리스트에 `AI_RECOMMENDED` 택배 항목 | 11/21 승인됨 |
+| 9 | **사건 간 근거 교차 차단:** 같은 시나리오 샘플 사건 두 개를 분석 → 각 결과의 `evidenceId`·`transactionId`가 모두 자기 사건 것 | 11/21 승인됨 |
+| T08-a | 분석 전 결과 조회 404 `NOT_FOUND` | 11/21 승인됨 |
+| T08-b | 두 번 분석 → 결과·AI 권장 항목이 두 번째 실행 것만(권장 항목이 겹쳐 2개가 되지 않음) | 11/21 승인됨 |
+| T08-c | 분석 뒤 사연 수정 → `isStale: true`, 고친 사연의 인용은 다시 분석하면 `verified: false` | 11/21 승인됨 |
+| T08-d | `UNEXPECTED` 샘플 → `DATE` 충돌 1건, `MATCH` 2건, `STATEMENT_ONLY` 1건 | 11/21 승인됨 |
 
 판정 필드 부재 테스트는 T10에서 한다(범위 그대로).
 
@@ -106,6 +106,8 @@
 4. 대체 결과(T11)는 이 시나리오 결과를 그대로 쓴다(계약 7절)
 
 ## 결정
+
+- 11/21 사용자 승인: 계획, 계약 테스트 8·9와 T08-a~d, 정할 것 1~4(추천대로). 1은 계약 v0.6.4로 4.3.1 표 문구만 고친다(T08 브랜치)
 
 ## 결과
 
