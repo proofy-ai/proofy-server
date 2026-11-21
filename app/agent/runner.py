@@ -7,14 +7,24 @@
 ① 단계의 글자 추출(T13)은 분석기와 상관없는 코드 작업이라 여기서 한다. `AGENT_LLM=claude`일 때만
 실제로 읽는다(가짜 분석은 정해 둔 결과라 읽지 않음, T13 결정 ①). 파일 읽기와 추출 결과 저장은
 넘겨받은 증빙 저장소(`EvidenceStore`)로만 한다.
+
+① 단계 분석기 전에 읽은 서류 줄과 사연을 가린다(T14, `app.agent.masking`). 가짜 분석에서도 사연은
+가린다. AI는 가린 글만 본다(원칙 4).
 """
 
 import time
-from dataclasses import dataclass
-from typing import Protocol
+from dataclasses import dataclass, replace
+from typing import Any, Protocol
 
 from app.agent.extract import Extraction, extract_document
 from app.agent.extract.ocr import TesseractEngine
+from app.agent.masking import (
+    MaskedText,
+    collect_names,
+    collect_narrative_names,
+    mask_regions,
+    mask_text,
+)
 from app.agent.output import AnalysisOutput
 from app.agent.steps import STAGES, AgentTimeout, Recorder
 
@@ -63,6 +73,10 @@ class EvidenceStore(Protocol):
 
     def load_extraction(self, evidence_id: str) -> Extraction | None: ...
 
+    def save_masked(
+        self, evidence_id: str, regions: list[dict[str, Any]], masked_text: MaskedText
+    ) -> None: ...
+
 
 class Analyzer(Protocol):
     def extract(self, ctx: RunContext, rec: Recorder, out: AnalysisOutput) -> None: ...
@@ -107,6 +121,21 @@ def _extract_evidence(
         rec.step("OCR", title, _extract_summary(result), status)
 
 
+def _mask_inputs(ctx: RunContext, out: AnalysisOutput, store: EvidenceStore | None) -> None:
+    """읽은 서류 줄과 사연을 가린다(T14). 서류가 바뀌면 이름 목록도 바뀌므로 실행마다 사건 전체를
+    다시 가린다. AI(T16)는 여기서 만든 `maskedText`·`masked_narrative`만 본다."""
+    lines = [r["text"] for ex in out.extractions.values() for r in ex.regions]
+    names = collect_names(lines) | collect_narrative_names(ctx.narrative)
+    for evidence_id, ex in list(out.extractions.items()):
+        if ex.status != "READY":
+            continue
+        regions, masked = mask_regions(ex.regions, names)
+        out.extractions[evidence_id] = replace(ex, regions=regions)
+        if store is not None:
+            store.save_masked(evidence_id, regions, masked)
+    out.masked_narrative = mask_text(ctx.narrative, names)
+
+
 def _extract_summary(result: Extraction) -> str:
     if result.status == "FAILED":
         return f"글자를 읽지 못했습니다({result.error}). 결과 화면에서 직접 확인으로 안내합니다."
@@ -134,8 +163,10 @@ def execute(
     for stage, _label in STAGES:
         ctx.check_deadline()
         rec.stage(stage)
-        if stage == "EXTRACTING" and ctx.agent == "claude" and store is not None:
-            _extract_evidence(ctx, rec, store, out)
+        if stage == "EXTRACTING":
+            if ctx.agent == "claude" and store is not None:
+                _extract_evidence(ctx, rec, store, out)
+            _mask_inputs(ctx, out, store)
         steps[stage](ctx, rec, out)
     ctx.check_deadline()
     return out

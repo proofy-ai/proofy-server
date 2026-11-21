@@ -26,7 +26,8 @@ ExtractMethod = Literal["PDF_TEXT", "OCR"]
 class Extraction:
     status: ExtractStatus
     method: ExtractMethod | None = None
-    # 줄 단위 영역 `{index, page, text, bbox, confidence}`(ERD 3.3 `regions_json`, 마스킹은 T14)
+    # 줄 단위 영역 `{index, page, text, bbox, confidence}`(ERD 3.3 `regions_json`).
+    # 가린 글 `maskedText`는 runner가 사건 이름 목록으로 붙인다(T14, `app.agent.masking`)
     regions: list[dict[str, Any]] = field(default_factory=list)
     # 흐리게 읽은 줄 수(계약 `lowConfidenceRegions`). 글자가 든 PDF는 0
     low_confidence: int | None = None

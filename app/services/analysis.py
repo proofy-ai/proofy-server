@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.agent import runner
 from app.agent.extract import Extraction
+from app.agent.masking import MaskedText
 from app.agent.output import AnalysisOutput
 from app.agent.runner import EvidenceRef, RunContext
 from app.agent.steps import (
@@ -341,6 +342,18 @@ class DbEvidenceStore:
             evidence.low_confidence_regions = result.low_confidence
             evidence.extract_error = result.error
             evidence.extracted_at = utc_now()
+            db.commit()
+
+    def save_masked(
+        self, evidence_id: str, regions: list[dict[str, Any]], masked_text: MaskedText
+    ) -> None:
+        with self._session_factory() as db:
+            evidence = self._evidence(db, evidence_id)
+            if evidence is None or evidence.extract_status != "READY":
+                return
+            # JSON 칸은 새 목록을 넣어야 바뀐 것으로 저장된다
+            evidence.regions_json = [dict(r) for r in regions]
+            evidence.masked_text = str(masked_text)
             db.commit()
 
     def load_extraction(self, evidence_id: str) -> Extraction | None:
