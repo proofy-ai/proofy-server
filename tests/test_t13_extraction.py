@@ -130,7 +130,8 @@ def test_claude_mode_extracts_and_saves(claude_client):
 
     run = _run_analysis(client, case_id, auth)
     assert run["status"] == "SUCCEEDED"
-    ocr_steps = [s for s in run["steps"] if s["type"] == "OCR"]
+    # 서류 읽기 step만 센다(거래 행 정리 step도 `OCR` 종류다, T15)
+    ocr_steps = [s for s in run["steps"] if s["type"] == "OCR" and s["title"].endswith(" 읽기")]
     # 실제 추출 step만 있고 가짜 분석기의 흉내 step은 없다
     assert len(ocr_steps) == 3
     assert ocr_steps[0]["status"] == "DONE" and "OCR 없이" in ocr_steps[0]["summary"]
