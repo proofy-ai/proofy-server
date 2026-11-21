@@ -9,6 +9,7 @@
 - 공통 파일: 앱 생성, 설정(`.env`), DB 연결, 공통 오류 응답(계약 1.1), CORS(계약 1절), camelCase 응답 기본 모델
 - `GET /api/v1/health`(계약 4.1)
 - CI: GitHub Actions에서 린트(ruff) + 테스트(pytest)
+- 이슈 템플릿(작업·버그)과 PR 템플릿(`.github/`). `shinhands2` 구조를 참고해 Proofy 규칙에 맞춤
 - README와 `CLAUDE.md`에 실행·테스트 명령
 
 ## 제외
@@ -103,6 +104,7 @@ T01에서 실제로 만드는 파일은 `main.py`, `config.py`, `db.py`, `errors
 - 11/21 같은 정책이 SQLAlchemy 컴파일 확장(`_collections_cy` 등 `.pyd`)을 막는다. 이 PC에서만 `DISABLE_SQLALCHEMY_CEXT=1 uv sync --no-binary-package sqlalchemy --reinstall-package sqlalchemy`로 순수 파이썬 설치. `uv.lock`·CI는 그대로. README에 대처법 기록
 - 11/21 계약 1.1에 없는 4xx(예: 405)는 `VALIDATION_ERROR`로 묶는다
 - 11/21 마이그레이션 도구는 Flyway 대신 Alembic(SQLAlchemy 모델과 같이 관리, SQLite·Postgres 동시 지원). 도입은 배포 때(T18). 그 전까지는 시작 시 `create_all`, 스키마가 바뀌면 로컬 DB 파일 삭제
+- 11/21 이슈·PR 템플릿 추가(사용자 제안, PR #22에 포함). `shinhands2`의 Notion 동기화·릴리스 스크립트·여러 워크플로는 가져오지 않음
 - 11/21 `app/samples/`는 빈 폴더라 git이 추적하지 않는다. T06에서 만든다
 
 ## 결과
