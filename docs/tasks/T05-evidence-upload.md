@@ -75,5 +75,6 @@
 - `uv run python -m pytest -q` → 45 passed(T05 5개: 계약 테스트 T05-a~c, 잘못된 `docType` 400·토큰 없음 401, 파일이 DB에 저장되고 이름의 경로가 떨어짐)
 - `uv run ruff check .` → All checks passed, `uv run ruff format --check .` → 이상 없음
 - OpenAPI(`/openapi.json`) 200, 업로드는 `multipart/form-data`
-- 미검증: 브라우저(FE)에서 실제 파일 업로드, Postgres `BYTEA` 저장(T18)
+- 11/21 사용자가 브라우저(Swagger UI `/docs`)에서 합성 거래내역서 PDF를 `TRANSACTION_RECORD`로 올림 → 체크리스트 `SALARY_DEPOSIT` `SATISFIED`·`satisfiedBy`에 그 ID, `missingCount` 3 → 2 확인
+- 미검증: FE 화면에서의 업로드(FE 코드 없음), Postgres `BYTEA` 저장(T18)
 
