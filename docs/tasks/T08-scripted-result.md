@@ -8,6 +8,7 @@
 - `claim_findings`, `finding_sources`, AI 권장 체크리스트 항목 저장
 - `GET /cases/{id}/result`(계약 4.11), `isStale`, `summary`
 - scripted 결과에도 초안 `section`과 `TOOL_CALL` 조회 이유(`summary`)를 넣는다(계약 v0.5, `docs/agent-design.md` 2.4·2.5)
+- 결과·근거 거래·AI 권장 체크리스트 항목은 가장 최근 성공 실행 것만(계약 v0.6 4.8·4.11)
 
 ## 제외
 

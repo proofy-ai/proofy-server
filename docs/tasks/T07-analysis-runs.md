@@ -8,6 +8,8 @@
 - `POST /cases/{id}/analysis-runs`(계약 4.9): `narrative` 먼저 저장, 사전 조건 422, 실행 중 409, 고친 초안 409
 - 백그라운드 실행(서버 안 스레드), 사건당 동시 실행 1개, 150초 시간 초과
 - `GET …/analysis-runs/{runId}`(계약 4.10): `stages`, `steps`
+- 분석 시작 때 보낸 `narrative`는 저장된 값과 다를 때만 저장·`inputVersion` +1(계약 v0.6 4.9)
+- 분석 시작마다 `usage_events`(`ANALYSIS_RUN`) 기록(ERD 3.10, 한도 계산은 T11)
 
 ## 제외
 

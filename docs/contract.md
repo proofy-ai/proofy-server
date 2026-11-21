@@ -1,4 +1,4 @@
-# Proofy FE–BE API 계약 v0.5
+# Proofy FE–BE API 계약 v0.6
 
 - 작성일: 2026-11-21 · 상태: **BE 결정 반영, FE 확인 후 "합의됨"으로 바꾼다**
 - 화면 기준: `docs/screen-flow.md`(흐름 화면 6개 + 체험 계정 선택·내 사건) · 데이터 기준: `docs/erd.md` · AI 흐름: `docs/agent-design.md`
@@ -28,10 +28,10 @@
 | 날짜 | 날짜만: `"2026-11-21"` (한국 날짜). 시각: ISO 8601 UTC `"2026-11-21T06:30:00Z"` |
 | 금액 | 원 단위 정수 `150000` (문자열·소수 금지) |
 | 인증 | 서버 로그인 없음. 화면의 "로그인"은 체험 계정 버튼일 뿐이고 서버는 계정을 모른다(6절). `POST /cases`(또는 `/cases/sample`) 응답의 `caseToken`을 이후 모든 `/cases/{caseId}/**` 요청에 `X-Case-Token` 헤더로 보낸다 |
-| CORS | 서버가 FE 배포 주소와 `http://localhost:5173`을 허용하고, 허용 헤더에 `Content-Type`, `X-Case-Token`을 넣는다. 추가 주소는 BE에 알려 줄 것 |
+| CORS | 서버가 FE 고정 배포 주소(Cloudflare)와 `http://localhost:5173`을 허용하고, 허용 헤더에 `Content-Type`, `X-Case-Token`을 넣는다. 배포마다 바뀌는 미리보기 주소는 등록하지 않는다. 주소는 서버 환경변수 `CORS_ORIGINS`로 넣으며, 추가 주소는 BE에 알려 줄 것 |
 | ID | 전부 UUID 문자열 |
 | 빈 값 | 값이 없으면 키를 빼지 않고 `null` |
-| 개인정보 | 서버가 보장한다: ① 업로드 원본 이미지·PDF는 외부 AI로 보내지 않는다 ② 서버에서 읽은 글자는 주민등록번호·계좌번호·전화번호·이름을 가린 뒤에만 AI에 보낸다 ③ 신분증과 신청인 인적사항은 받지 않는다 ④ 사건은 24시간 뒤 자동 삭제. 이 서비스는 **시연용이므로 합성 서류만** 올리게 안내한다(6절) |
+| 개인정보 | 서버가 보장한다: ① 업로드 원본 이미지·PDF는 외부 AI로 보내지 않는다 ② 서버에서 읽은 글자와 사연은 주민등록번호·계좌번호·전화번호·이름을 가린 뒤에만 AI에 보낸다 ③ 신분증과 신청인 인적사항은 받지 않는다 ④ 사건은 24시간 뒤 자동 삭제. 이 서비스는 **시연용이므로 합성 서류만** 올리게 안내한다(6절) |
 
 ### 1.1 오류 응답
 
@@ -63,8 +63,10 @@
 | 415 | `UNSUPPORTED_FILE_TYPE` | JPG·PNG·PDF 외(파일 내용으로 판별) | 안내 |
 | 422 | `ANALYSIS_PRECONDITION` | 사연 20자 미만 또는 거래내역서 없음. `details.missing`에 `NARRATIVE`·`TRANSACTION_RECORD` | 3번 화면에 머물고 빠진 항목 강조 |
 | 429 | `RATE_LIMITED` | 같은 IP에서 사건 생성 시간당 20회 초과, 또는 사건당 분석 시간당 5회 초과 | 안내 |
-| 429 | `DAILY_LIMIT` | 서비스 전체 AI 분석 하루 300회 초과(비용 보호). **샘플 사건은 이 오류 대신 미리 만든 결과로 끝난다(4.10)** | "오늘 시연 한도를 다 썼어요" 안내 |
+| 429 | `DAILY_LIMIT` | 서비스 전체 AI 분석 하루(한국 날짜) 300회 초과(비용 보호). **샘플 사건은 이 오류 대신 미리 만든 결과로 끝난다(4.10)** | "오늘 시연 한도를 다 썼어요" 안내 |
 | 500 | `INTERNAL` | 서버 오류 | 재시도 버튼 |
+
+한도 숫자(20·5·300)는 기본값이고 서버 환경변수로 바꿀 수 있다. 한도는 사건과 따로 저장한 사용량 기록으로 세므로 **사건을 지워도 줄어들지 않는다**(`docs/erd.md` 3.10). 오늘 사용량은 `GET /health`의 `dailyUsage`로 본다.
 
 ## 2. 코드값(enum)
 
@@ -103,10 +105,11 @@
 ### 4.1 `GET /health`
 
 ```json
-{ "status": "ok", "agent": "claude", "demoMode": true }
+{ "status": "ok", "agent": "claude", "demoMode": true, "dailyUsage": { "date": "2026-11-21", "used": 12, "limit": 300 } }
 ```
 
 - `agent`: `claude` 또는 `scripted`(7절). 시연 전에 확인용.
+- `dailyUsage`: 오늘(한국 날짜) 외부 AI를 부른 분석 수와 하루 한도. 운영 확인용이며 FE가 쓰지 않아도 된다. `used`가 `limit`에 닿으면 직접 만든 사건과 수정한 샘플 사건은 `429 DAILY_LIMIT`을 받는다.
 - `demoMode: true`면 FE는 3번 화면 업로드 영역 위에 "시연용 서비스입니다. 실제 서류 대신 샘플(합성) 서류만 올려 주세요"를 항상 보여 준다. P0는 항상 `true`.
 
 ### 4.2 `GET /meta/requirements?inflowType=SALARY`
@@ -221,7 +224,7 @@
 | `inflow.occurredAt` | 아니오 | 날짜(`"2026-11-08"`) 또는 `null`. 미래면 400 |
 | `hasPriorFreeze` | 예(값으로 `null` 허용) | 예 `true` / 아니오 `false` / 모름 `null` |
 
-같은 IP에서 시간당 20회까지(`429 RATE_LIMITED`).
+같은 IP에서 시간당 20회까지(`429 RATE_LIMITED`). 샘플 사건 생성(4.3.1)도 함께 센다.
 
 응답 `201` — `caseToken`은 **이 응답에서 한 번만** 준다. FE는 바로 localStorage에 저장한다.
 
@@ -310,7 +313,7 @@
 { "narrative": "온라인 쇼핑몰을 운영하는 개인사업자입니다. 거래처 소매점에 가죽 지갑 3개를 15만 원에 납품하기로 하고 11월 8일 대금을 계좌로 받았습니다. 물건은 다음 날 택배로 보냈습니다." }
 ```
 
-응답 `200 { "case": { … } }`. 내용이 바뀌면 `inputVersion`이 1 오른다. `narrative`는 최대 2000자.
+응답 `200 { "case": { … } }`. 저장된 값과 **실제로 다른 값**이 들어오면 `inputVersion`이 1 오른다. 같은 값을 다시 보내면 그대로다. `narrative`는 최대 2000자.
 
 ### 4.6 `DELETE /cases/{caseId}`
 
@@ -355,7 +358,7 @@
 
 ### 4.8 `GET /cases/{caseId}/checklist` — 현재 체크리스트
 
-화면 3에서 올린 서류에 따라 항목이 채워지는 것을 보여 줄 때, 탭 B에서 쓴다. 분석 전에는 4.2의 항목에 상태만 붙고, 분석 후에는 `AI_RECOMMENDED` 항목이 더해진다.
+화면 3에서 올린 서류에 따라 항목이 채워지는 것을 보여 줄 때, 탭 B에서 쓴다. 분석 전에는 4.2의 항목에 상태만 붙고, 분석 후에는 `AI_RECOMMENDED` 항목이 더해진다. `AI_RECOMMENDED` 항목은 **가장 최근 성공한 분석 실행 것만** 준다(다시 분석하면 이전 실행의 권장 항목은 빠진다).
 
 ```json
 {
@@ -402,11 +405,11 @@
 { "narrative": "온라인 쇼핑몰을 운영하는 개인사업자입니다. …", "overwriteEditedDraft": false }
 ```
 
-- `narrative`(선택): 있으면 서버가 **먼저 저장한 뒤** 사전 조건을 검사하고 분석을 시작한다. 자동 저장(1초 지연)이 끝나기 전에 버튼을 눌러도 최신 사연으로 분석되게 FE는 항상 보낸다.
+- `narrative`(선택): 있으면 서버가 **먼저 저장한 뒤** 사전 조건을 검사하고 분석을 시작한다. 자동 저장(1초 지연)이 끝나기 전에 버튼을 눌러도 최신 사연으로 분석되게 FE는 항상 보낸다. 저장된 사연과 같으면 아무것도 바꾸지 않고 `inputVersion`도 그대로다(4.5와 같은 규칙). 그래서 샘플 사건을 고치지 않고 분석하면 "샘플 그대로" 조건(4.10)이 유지된다.
 - 사전 조건: 사연 20자 이상 + `requiredForAnalysis` 항목(거래내역서, `docType=TRANSACTION_RECORD`) 1개 이상 → 아니면 `422 ANALYSIS_PRECONDITION`, `details.missing`에 빠진 것(`NARRATIVE`, `TRANSACTION_RECORD`)
 - 이미 실행 중 → `409 ANALYSIS_IN_PROGRESS` (`details.runId`)
 - 사용자가 고친 초안이 있고 `overwriteEditedDraft=false` → `409 DRAFT_HAS_EDITS`
-- 사건당 시간당 5회 → `429 RATE_LIMITED`, 서비스 전체 하루 300회 → `429 DAILY_LIMIT`
+- 사건당 시간당 5회 → `429 RATE_LIMITED`, 서비스 전체 하루 300회 → `429 DAILY_LIMIT`. 하루 한도는 외부 AI를 부르는 실행만 센다(1.1)
 - **상담 안내 검사:** 사전 조건을 통과하면 서버가 사연을 정해 둔 표현 목록(통장·계좌·체크카드 대여·양도, 비밀번호 전달, 환전·구매대행·송금 알바, 현금 인출 후 전달 등)으로 검사한다. 걸리면 AI를 부르지 않고 실행을 바로 `SUCCEEDED`로 끝내며, 결과에 `referral`을 넣고 초안은 만들지 않는다(4.11). 이 검사는 하루 한도에 세지 않는다
 
 응답 `202`
@@ -450,7 +453,7 @@ FE는 1.5초마다 부르고 `status`가 `RUNNING`이 아니면 멈춘다. 180�
 
 ### 4.11 결과 — `GET /cases/{caseId}/result`
 
-가장 최근 **성공한** 분석 결과. 없으면 `404 NOT_FOUND`.
+가장 최근 **성공한** 분석 결과. 없으면 `404 NOT_FOUND`. `findings`, 근거 거래, `checklist`의 `AI_RECOMMENDED` 항목, `draft`는 모두 이 실행 것만 준다. 이전 실행의 것은 섞이지 않는다.
 
 ```json
 {
@@ -526,7 +529,7 @@ FE는 1.5초마다 부르고 `status`가 `RUNNING`이 아니면 멈춘다. 180�
 ```
 
 - `isStale: true` = 분석 뒤에 사연·서류가 바뀌었다. 결과 상단에 "자료가 바뀌었어요. 다시 분석하기" 배너.
-- `referral`: 보통은 `null`. 4.9의 상담 안내 검사에 걸리면 아래 모양이고, 이때 `findings: []`, `draft: null`, `summary`는 모두 0이며 `GET /cases/{id}/draft`는 `404 NOT_FOUND`다. 체크리스트는 평소처럼 준다.
+- `referral`: 보통은 `null`. 4.9의 상담 안내 검사에 걸리면 아래 모양이고, 이때 `findings: []`, `draft: null`, `summary`는 모두 0이며 `GET /cases/{id}/draft`는 `404 NOT_FOUND`다. **이전 분석에서 만든 초안이 있었으면 서버가 지운다**(다시 분석해 상담 안내로 끝난 경우). 체크리스트는 평소처럼 준다.
 
 ```json
 "referral": {
@@ -543,7 +546,7 @@ FE는 1.5초마다 부르고 `status`가 `RUNNING`이 아니면 멈춘다. 180�
   - 이 안내는 사람이나 사건을 판정하는 것이 아니라 정해 둔 표현이 있는지만 본다. `matchedPhrases`를 화면에 그대로 보여 준다. 잘못 걸렸으면 사용자가 사연을 고쳐 다시 분석할 수 있다.
 - `precomputed: true` = 이번에 AI가 분석한 결과가 아니라 샘플용으로 미리 만든 결과다(4.10). 결과 상단에 "지금은 AI 분석을 쓸 수 없어 미리 만든 샘플 결과를 보여 드려요" 배너를 `aiNotice`와 함께 보여 준다.
 - `conflict.field`: `AMOUNT` · `DATE` · `COUNTERPARTY` · `OTHER`. 탭 A의 경고 문구에 `statement`(사용자 진술)와 `found`(자료)를 나란히 보여 준다.
-- `verified: false`인 근거는 "원문에서 찾지 못한 인용"으로 흐리게 표시한다.
+- `verified: false`인 근거는 "원문에서 찾지 못한 인용"으로 흐리게 표시한다. 서버는 인용을 **AI가 실제로 본 마스킹한 글**(서류 줄의 마스킹본, 마스킹한 사연)과 대조한다. 그래서 `quote`에도 가린 값(`김*수`)이 그대로 나올 수 있다.
 - `counterparty` 등 사람 이름·계좌번호는 서버가 가린 값으로 준다.
 
 ### 4.12 소명서 초안
@@ -657,7 +660,7 @@ FE는 1.5초마다 부르고 `status`가 `RUNNING`이 아니면 멈춘다. 180�
 
 | 항목 | 기본값(합의 전까지) |
 |---|---|
-| 개발 서버 주소, FE 배포 주소 | BE가 배포 후 공유. FE 주소는 CORS 등록을 위해 BE에 알려 줌 |
+| 개발 서버 주소, FE 배포 주소 | BE가 배포 후 공유. FE는 Cloudflare 고정 도메인을 CORS 등록을 위해 BE에 알려 줌(미리보기 주소 제외) |
 | 재분석 시 탭 B의 사용자 체크(`checked`) 유지 | 같은 `code`인 공식·유형 항목은 유지, AI 권장 항목은 새로 만듦 |
 | M 내 사건(마이페이지) | 시간 부족 시 제외(화면 문서 범위 결정과 같음). API는 이미 있음. **L 체험 계정 선택은 제외하지 않는다** |
 
@@ -669,4 +672,5 @@ FE는 1.5초마다 부르고 `status`가 `RUNNING`이 아니면 멈춘다. 180�
 | 2026-11-21 | 0.2 | ① 사건은 화면 2 "다음"에서 생성 확정(사연은 화면 3에서 `PATCH`) ② `COMPARING` 문구를 "거래내역과 대조 중"으로, FE는 `stages[].label`만 표시 ③ 요구 서류에 `requiredForAnalysis` 추가, 거래내역서를 분석 시작 조건으로(`422`의 `details.missing`) |
 | 2026-11-21 | 0.3 | 외부 검토 반영. ① 초안: `CONFLICT` 연결 문장 자동 확인 필요, 진술 값 일치 시 서버가 연결, `warnings`, 문장별 `confirmed`·`unconfirmedCount`, 복사·PDF 전 확인창 ② 개인정보 보장 항목·`demoMode`·합성 데이터 안내 ③ `POST /cases/sample`, `GET /samples` 샘플 체험 ④ 일정에 리허설·소개서·제출(업로드+이메일) ⑤ `ANALYSIS_INPUT` 분류 신설, 물품 거래는 사업자 판매 대금 전제·예시를 청년 1인 판매 사업자로 ⑥ IP당 사건 생성 제한, `DAILY_LIMIT` ⑦ 미래 날짜 400 ⑧ 분석 시작에 `narrative` 동봉 ⑨ CORS 허용 헤더 |
 | 2026-11-21 | 0.4 | 체험 계정·마이페이지. ① L 체험 계정 선택(test01 `GOODS`, test02 `UNEXPECTED`), M 내 사건 화면 추가, 서버 인증은 그대로 ② localStorage `proofy.case` 한 건 → `proofy.cases` 배열 ③ `UNEXPECTED` 화면 노출, 유형별 항목(`THREAT_MESSAGE`, `UNKNOWN_DEPOSIT_RECORD`), 샘플 시나리오 추가, `SALARY` 샘플은 P1 ④ `case.sampleScenario` 추가 ⑤ 샘플 사건은 AI 실패·하루 한도 초과 때 미리 만든 결과로 끝남(`result.precomputed`, step `FALLBACK`) ⑥ 상담 안내 검사: 통장 대여·송금 대행 표현이 사연에 있으면 초안 대신 `result.referral`(step `SAFETY`) |
+| 2026-11-21 | 0.6 | FE 수정 요청 반영(`docs/erd.md` v1.1). ① 한도·비용을 사건과 분리한 사용량 기록으로 셈(사건 삭제로 줄지 않음), 한도 숫자는 서버 환경변수 ② `GET /health`에 `dailyUsage` 추가 ③ 인용 검증은 마스킹한 글(서류·사연) 기준, 사연도 마스킹해서 AI에 보냄 ④ `PATCH`와 분석 시작의 `narrative`는 값이 실제로 바뀔 때만 `inputVersion` +1 ⑤ 다시 분석해 상담 안내로 끝나면 이전 초안 삭제(`GET /draft` 404) ⑥ 결과·근거 거래·AI 권장 항목·초안은 가장 최근 성공 실행 것만 ⑦ CORS는 FE 고정 도메인만(미리보기 제외). **필드 추가와 동작 명시뿐이라 v0.4·v0.5 FE가 그대로 동작한다** |
 | 2026-11-21 | 0.5 | AI 에이전트 계획 반영(`docs/agent-design.md`). ① 초안 문장에 `section`(`DraftSection`: 입금 경위·가담하지 않았다는 설명·피해 경위), `fullText`는 묶음 사이 빈 줄 ② `UNEXPECTED`에 피해 신고 기록 항목 `INCIDENT_REPORT`(`OPTIONAL`, 서류 종류는 기존 `OTHER`). **모두 필드·항목 추가라 v0.4 FE가 그대로 동작한다** ③ `TOOL_CALL` step `summary`에 AI가 밝힌 조회 이유, `VERIFY` step 설명 |
