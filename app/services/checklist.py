@@ -1,4 +1,9 @@
-"""사건 체크리스트(계약 4.8). 충족 여부는 올린 서류의 `docType`으로 코드가 계산한다(원칙 2)."""
+"""사건 체크리스트(계약 4.8). 충족 여부는 올린 서류의 `docType`으로 코드가 계산한다(원칙 2).
+
+AI 권장 항목은 가장 최근 성공 실행 것만 더한다. 고정 항목이 이미 받는 `docType`
+(예: test02의 `CHAT`)은 AI 권장 항목 충족에 세지 않는다. 협박 문자 하나로 "반환 제안 대화"까지
+충족되지 않게(계약 v0.6.5).
+"""
 
 import uuid
 from collections.abc import Sequence
@@ -13,6 +18,7 @@ from app.schemas.checklist import ChecklistItem, ChecklistResponse, ChecklistSta
 from app.services.clock import utc_now
 from app.services.evidence import list_evidence
 from app.services.requirements import Requirement, requirements_for
+from app.services.runs import latest_succeeded_run
 
 
 @dataclass(frozen=True)
@@ -95,11 +101,55 @@ def _to_item(
     )
 
 
+def ai_rows(db: Session, case: Case) -> list[ChecklistItemRow]:
+    """가장 최근 성공 실행의 AI 권장 항목(만든 순서)."""
+    run = latest_succeeded_run(db, case.id)
+    if run is None:
+        return []
+    return list(
+        db.scalars(
+            select(ChecklistItemRow)
+            .where(
+                ChecklistItemRow.case_id == case.id,
+                ChecklistItemRow.analysis_run_id == run.id,
+            )
+            .order_by(ChecklistItemRow.created_at, ChecklistItemRow.id)
+        )
+    )
+
+
+def _ai_item(
+    row: ChecklistItemRow, evidence: Sequence[UploadedEvidence], fixed_doc_types: set[str]
+) -> ChecklistItem:
+    accepted = list(row.accepted_doc_types_json or [])
+    countable = set(accepted) - fixed_doc_types
+    satisfied_by = [e.evidence_id for e in evidence if e.doc_type in countable]
+    return ChecklistItem(
+        item_id=row.id,
+        code=None,
+        label=row.label or "",
+        category="AI_RECOMMENDED",
+        status="SATISFIED" if satisfied_by else "MISSING",
+        accepted_doc_types=accepted,
+        required_for_analysis=False,
+        satisfied_by=satisfied_by,
+        checked=row.checked,
+        note=row.note,
+        source_ref=None,
+    )
+
+
+def _fixed_doc_types(requirements: Sequence[Requirement]) -> set[str]:
+    return {t for r in requirements for t in r.accepted_doc_types}
+
+
 def get_checklist(db: Session, case: Case) -> ChecklistResponse:
     rows = sync_items(db, case)
     evidence = uploaded_evidence(db, case)
-    # AI 권장 항목(가장 최근 성공 실행 것만, 계약 4.8)은 T08에서 더한다
-    items = [_to_item(rows[r.code], r, evidence) for r in requirements_for(case.inflow.inflow_type)]
+    requirements = requirements_for(case.inflow.inflow_type)
+    items = [_to_item(rows[r.code], r, evidence) for r in requirements]
+    fixed = _fixed_doc_types(requirements)
+    items += [_ai_item(row, evidence, fixed) for row in ai_rows(db, case)]
     missing = sum(1 for i in items if i.status == "MISSING" and not i.checked)
     return ChecklistResponse(items=items, missing_count=missing)
 
@@ -109,9 +159,16 @@ def set_checked(db: Session, case: Case, item_id: str, checked: bool) -> Checkli
     rows = sync_items(db, case)
     row = next((r for r in rows.values() if r.id == item_id), None)
     if row is None:
+        # 이전 실행의 AI 권장 항목은 화면에 없으므로 없는 것과 같게 본다
+        row = next((r for r in ai_rows(db, case) if r.id == item_id), None)
+    if row is None:
         raise ApiError(404, "NOT_FOUND", "체크리스트 항목을 찾을 수 없습니다.")
     if row.checked != checked:
         row.checked = checked
         db.commit()
-    requirement = next(r for r in requirements_for(case.inflow.inflow_type) if r.code == row.code)
-    return _to_item(row, requirement, uploaded_evidence(db, case))
+    requirements = requirements_for(case.inflow.inflow_type)
+    evidence = uploaded_evidence(db, case)
+    if row.code is None:
+        return _ai_item(row, evidence, _fixed_doc_types(requirements))
+    requirement = next(r for r in requirements if r.code == row.code)
+    return _to_item(row, requirement, evidence)

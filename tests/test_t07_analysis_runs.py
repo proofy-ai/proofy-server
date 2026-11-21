@@ -56,13 +56,13 @@ class _WaitingAnalyzer:
     def __init__(self) -> None:
         self.release = threading.Event()
 
-    def extract(self, ctx, rec) -> None:
+    def extract(self, ctx, rec, out) -> None:
         self.release.wait(5)
 
-    def compare(self, ctx, rec) -> None:
+    def compare(self, ctx, rec, out) -> None:
         pass
 
-    def draft(self, ctx, rec) -> None:
+    def draft(self, ctx, rec, out) -> None:
         pass
 
 
@@ -184,7 +184,7 @@ def test_second_start_while_running_is_409(client, monkeypatch):
 # T07-e: 마감 초과 → FAILED, AGENT_TIMEOUT, 사건 ERROR
 def test_timeout_fails_run(client, settings, monkeypatch):
     class SlowAnalyzer(_WaitingAnalyzer):
-        def extract(self, ctx, rec) -> None:
+        def extract(self, ctx, rec, out) -> None:
             self.release.wait(0.6)
 
     monkeypatch.setattr(runner, "select_analyzer", lambda agent: SlowAnalyzer())

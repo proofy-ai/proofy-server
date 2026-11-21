@@ -1,0 +1,75 @@
+"""분석기가 내는 결과 모양. 가짜 분석기(T08)와 Claude 분석기(T16)가 같은 모양을 낸다.
+
+분석기는 DB를 만지지 않고 이 모양만 채운다. 저장·검증(같은 사건 소속, 인용 대조)은
+`app/services/results.py`가 한다. 거래 행은 저장 전이라 ID가 없으므로 `key`로 가리킨다.
+"""
+
+from dataclasses import dataclass, field
+from datetime import date
+from typing import Literal
+
+FindingStatus = Literal["MATCH", "CONFLICT", "STATEMENT_ONLY", "UNKNOWN"]
+ConflictField = Literal["AMOUNT", "DATE", "COUNTERPARTY", "OTHER"]
+SourceKind = Literal["NARRATIVE", "EVIDENCE", "TRANSACTION"]
+
+# 한 실행당 AI 권장 항목 상한(계약 4.8)
+MAX_RECOMMENDED = 3
+
+
+@dataclass(frozen=True)
+class TransactionRow:
+    """거래내역서에서 뽑은 거래 행(ERD 3.4)."""
+
+    key: str
+    evidence_id: str
+    region_index: int
+    direction: Literal["IN", "OUT"]
+    amount_krw: int
+    occurred_at: date
+    counterparty_masked: str | None
+    raw_text: str
+
+
+@dataclass(frozen=True)
+class Conflict:
+    field: ConflictField
+    statement: str
+    found: str
+
+
+@dataclass(frozen=True)
+class Source:
+    kind: SourceKind
+    quote: str | None = None
+    evidence_id: str | None = None
+    page: int | None = None
+    region_index: int | None = None
+    transaction_key: str | None = None
+
+
+@dataclass(frozen=True)
+class Finding:
+    claim: str
+    status: FindingStatus
+    # 화면 문장. FE 타입이 null을 받지 않아 항상 채운다
+    note: str
+    conflict: Conflict | None = None
+    sources: tuple[Source, ...] = ()
+
+
+@dataclass(frozen=True)
+class RecommendedDoc:
+    label: str
+    note: str
+    accepted_doc_types: tuple[str, ...]
+
+
+@dataclass
+class AnalysisOutput:
+    """세 단계가 차례로 채운다."""
+
+    # AI가 본 사연(마스킹본). 인용 대조 기준
+    masked_narrative: str | None = None
+    transactions: list[TransactionRow] = field(default_factory=list)
+    findings: list[Finding] = field(default_factory=list)
+    recommended: list[RecommendedDoc] = field(default_factory=list)
