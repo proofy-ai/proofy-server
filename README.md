@@ -13,11 +13,11 @@
 ```bash
 uv sync                       # 의존성 설치
 cp .env.example .env          # 설정 (필요하면 값 수정)
-uv run python -m uvicorn app.main:app --reload
+uv run python -m uvicorn app.main:app --reload --port 8080
 ```
 
-- 상태 확인: http://localhost:8000/api/v1/health
-- API 문서(OpenAPI): http://localhost:8000/docs
+- 상태 확인: http://localhost:8080/api/v1/health
+- API 문서(OpenAPI): http://localhost:8080/docs
 
 ## 테스트와 린트
 
