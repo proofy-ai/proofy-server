@@ -78,8 +78,7 @@ class ScriptedAnalyzer:
 
     def extract(self, ctx: RunContext, rec: Recorder, out: AnalysisOutput) -> None:
         self._pause(ctx)
-        # 가짜 분석은 마스킹 전이라 사연을 그대로 대조 기준으로 쓴다(T14가 마스킹본으로 바꾼다)
-        out.masked_narrative = ctx.narrative
+        # 사연 가리기(`out.masked_narrative`)는 runner가 이 단계 전에 한다(T14)
         # 실제 추출(T13, `AGENT_LLM=claude`)이 이미 step을 남겼으면 흉내 내지 않는다
         if not out.extractions:
             for e in ctx.evidence:

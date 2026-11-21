@@ -9,6 +9,7 @@ from datetime import date
 from typing import Literal
 
 from app.agent.extract import Extraction
+from app.agent.masking import MaskedText
 
 FindingStatus = Literal["MATCH", "CONFLICT", "STATEMENT_ONLY", "UNKNOWN"]
 ConflictField = Literal["AMOUNT", "DATE", "COUNTERPARTY", "OTHER"]
@@ -85,11 +86,12 @@ class DraftSentence:
 class AnalysisOutput:
     """세 단계가 차례로 채운다."""
 
-    # AI가 본 사연(마스킹본). 인용 대조 기준
-    masked_narrative: str | None = None
+    # AI가 본 사연(마스킹본, runner가 ① 단계 전에 채움). 인용 대조 기준
+    masked_narrative: MaskedText | None = None
     transactions: list[TransactionRow] = field(default_factory=list)
     findings: list[Finding] = field(default_factory=list)
     recommended: list[RecommendedDoc] = field(default_factory=list)
     draft_sentences: list[DraftSentence] = field(default_factory=list)
-    # 서류별로 읽은 글자(evidenceId → 추출 결과). ① 단계가 채우고, 저장은 그때 이미 끝났다
+    # 서류별로 읽은 글자(evidenceId → 추출 결과). ① 단계가 채우고 runner가 줄마다 `maskedText`를
+    # 붙인다(T14). 저장은 그때 이미 끝났다. AI에는 `maskedText`만 보낸다
     extractions: dict[str, Extraction] = field(default_factory=dict)
