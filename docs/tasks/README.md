@@ -82,7 +82,7 @@ T00 규칙
 | [T21](T21-legal-guides.md) | 내 상황 정리 + 법령 근거(11/22 추가, 2시간 상한) | 보류(코드만 있음, 계약 밖 #47) | #43 | #44 |
 | [T12](T12-synthetic-documents.md) | 합성 샘플 서류 | 완료 | #14 | #50 |
 | [T13](T13-text-extraction.md) | 글자 추출(텍스트 PDF, OCR) | 완료 | #15 | #51 |
-| [T14](T14-masking.md) | 개인정보 마스킹 | 완료 | #16 | (PR 번호) |
+| [T14](T14-masking.md) | 개인정보 마스킹 | 완료 | #16 | #54 |
 | [T15](T15-transaction-rows.md) | 거래 행 추출 | 대기 | #17 | |
 | [T16](T16-compare-agent.md) | 대조 에이전트 | 대기 | #18 | |
 | [T17](T17-draft-verify.md) | 초안 작성 + 후검증 | 대기 | #19 | |
