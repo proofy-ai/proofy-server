@@ -37,6 +37,7 @@ ERD는 `narrative NOT NULL` 때문에 화면 3 완료 시점에 사건을 만들
 화면 3은 "유형별 체크리스트에 맞춰 사진을 올린다", 탭 B는 그 체크리스트의 빈칸이다. 그런데 `checklist_items`와 `evidence` 사이에 연결이 없고, "건강보험자격득실확인서 **또는** 재직증명서 중 하나" 같은 택일 묶음을 표현할 수 없다.
 
 - 제안: 유형별 **요구 서류 목록은 DB가 아니라 코드 상수**(출처 포함)로 두고, 각 항목에 허용 `docType` 목록을 둔다. 업로드 시 `evidence.doc_type`을 받으면 충족 여부는 계산으로 나온다.
+- 분류(`category`)는 계약 v0.3 기준 `OFFICIAL_REQUIRED` / `TYPE_GUIDE` / `ANALYSIS_INPUT` / `OPTIONAL` / `AI_RECOMMENDED` 다섯 가지.
 - `checklist_items` 테이블은 **AI 권장 항목과 사용자의 체크 표시**만 저장한다. 컬럼: `code`(공식 항목이면 상수 코드), `category`, `label`, `source_reference`, `checked`, `analysis_run_id`.
 - 신분증 사본은 `NOT_COLLECTED`(받지 않음, 별도 첨부 안내) 상태로 항상 표시.
 
@@ -44,7 +45,7 @@ ERD는 `narrative NOT NULL` 때문에 화면 3 완료 시점에 사건을 만들
 
 `drafts.reason_text`가 TEXT 하나라 "증빙 없는 문장"을 표시할 단위가 없다.
 
-- 제안: `drafts.sentences_json` = `[{id, text, findingIds[], needsCheck, needsCheckReason, edited}]`. 사용자 수정 시 배열 전체를 `expectedVersion`과 함께 교체(409 충돌 처리는 ERD 그대로). 수정한 문장은 `edited=true`, `needsCheck`는 유지(근거가 생긴 게 아니므로).
+- 제안: `drafts.sentences_json` = `[{id, text, origin, findingIds[], needsCheck, needsCheckReason, confirmed, edited}]`, `drafts.warnings_json`. 사용자 수정 시 배열 전체를 `expectedVersion`과 함께 교체(409 충돌 처리는 ERD 그대로). 수정한 문장은 `edited=true`, `needsCheck`는 유지(근거가 생긴 게 아니므로), `confirmed`(사용자가 직접 확인함)는 글이 바뀌면 `false`로 되돌림. CONFLICT 관련 규칙은 계약 4.12.
 
 ### 2.5 "원장"의 정체 — `demo_transactions` 재검토 (거래내역서는 분석 필수로 결정)
 
@@ -66,7 +67,8 @@ ERD는 `narrative NOT NULL` 때문에 화면 3 완료 시점에 사건을 만들
 
 | 테이블 | 추가 | 이유 |
 |---|---|---|
-| `cases` | `access_token_hash`, `expires_at` | 2.2, 자동 삭제 |
+| `cases` | `access_token_hash`, `expires_at`, `is_sample`, `created_ip_hash` | 2.2, 자동 삭제, 샘플 체험(계약 4.3.1), IP당 생성 제한 |
+| `evidence` | `is_sample` | 샘플 사건의 합성 서류 표시 |
 | `analysis_runs` | `model`, `prompt_version`, `input_tokens`, `output_tokens`, `cost_micro_usd`, `steps_json` | 비용 근거(심사 "비용·운영 부담"), 4번 화면 진행 기록 |
 | `evidence` | `low_confidence_regions`, `masked_text` | OCR 신뢰도 표시, AI에는 마스킹본만 전달 |
 | `claim_findings` | `conflict_detail`(기대값/실제값) | 탭 A "어긋나는 부분 경고" |
