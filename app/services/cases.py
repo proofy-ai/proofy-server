@@ -36,6 +36,13 @@ def create_case(db: Session, payload: CaseCreate, today: date) -> tuple[Case, st
     _check_not_future(fields, "inflow.occurredAt", payload.inflow.occurred_at, today)
     _raise_if_invalid(fields)
 
+    case, token = stage_case(db, payload)
+    db.commit()
+    return case, token
+
+
+def stage_case(db: Session, payload: CaseCreate, narrative: str | None = None) -> tuple[Case, str]:
+    """사건과 입금 정보를 세션에 넣는다(커밋은 부르는 쪽이 한다). 날짜 검사는 부르는 쪽 책임."""
     token, token_hash = issue_token()
     now = utc_now()
     case = Case(
@@ -46,7 +53,7 @@ def create_case(db: Session, payload: CaseCreate, today: date) -> tuple[Case, st
         notice_received_date=payload.notice_received_date,
         public_notice_date=payload.public_notice_date,
         has_prior_freeze=payload.has_prior_freeze,
-        narrative=None,
+        narrative=narrative,
         input_version=1,
         created_at=now,
         updated_at=now,
@@ -60,7 +67,6 @@ def create_case(db: Session, payload: CaseCreate, today: date) -> tuple[Case, st
         created_at=now,
     )
     db.add(case)
-    db.commit()
     return case, token
 
 
