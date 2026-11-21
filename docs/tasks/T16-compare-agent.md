@@ -4,7 +4,7 @@
 
 ## 범위
 
-- Claude Messages API 도구 루프(`agent-design.md` 4절 ②): `get_transactions`, `get_evidence_regions`
+- Claude Messages API 도구 루프(`docs/agent-design.md` 2.4): `get_transactions`, `get_evidence_regions`
 - 구조화 출력: findings, AI 권장 자료
 - `steps` 기록, 거절·시간 초과 처리
 - 재사용 시 출처를 커밋 메시지에 기록(corebank `llm/claude.py` 재시도·비용 등)
