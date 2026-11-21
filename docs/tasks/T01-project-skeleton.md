@@ -102,6 +102,7 @@ T01에서 실제로 만드는 파일은 `main.py`, `config.py`, `db.py`, `errors
 - 11/21 실행 명령은 `uv run python -m uvicorn …`, `uv run python -m pytest`로 통일. 이 PC의 애플리케이션 제어 정책이 uv가 만든 `uvicorn.exe`·`pytest.exe`를 막는다(`ruff.exe`는 됨). `python -m` 형태는 CI·Docker에서도 같게 돈다
 - 11/21 같은 정책이 SQLAlchemy 컴파일 확장(`_collections_cy` 등 `.pyd`)을 막는다. 이 PC에서만 `DISABLE_SQLALCHEMY_CEXT=1 uv sync --no-binary-package sqlalchemy --reinstall-package sqlalchemy`로 순수 파이썬 설치. `uv.lock`·CI는 그대로. README에 대처법 기록
 - 11/21 계약 1.1에 없는 4xx(예: 405)는 `VALIDATION_ERROR`로 묶는다
+- 11/21 마이그레이션 도구는 Flyway 대신 Alembic(SQLAlchemy 모델과 같이 관리, SQLite·Postgres 동시 지원). 도입은 배포 때(T18). 그 전까지는 시작 시 `create_all`, 스키마가 바뀌면 로컬 DB 파일 삭제
 - 11/21 `app/samples/`는 빈 폴더라 git이 추적하지 않는다. T06에서 만든다
 
 ## 결과
