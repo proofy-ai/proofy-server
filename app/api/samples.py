@@ -1,6 +1,6 @@
 """샘플 체험 API(계약 4.3.1). 업무 로직은 `app/services/samples.py`에 있다."""
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import FileResponse
 
 from app.db import DbSession
@@ -8,15 +8,17 @@ from app.schemas.case import CaseCreated
 from app.schemas.sample import SampleCaseCreate, SamplesResponse
 from app.services import cases as case_service
 from app.services import samples as sample_service
+from app.services.auth import client_ip
 from app.services.deadline import today_kst
 
 router = APIRouter(tags=["samples"])
 
 
 @router.post("/cases/sample", status_code=201, response_model=CaseCreated)
-def create_sample_case(payload: SampleCaseCreate, db: DbSession) -> CaseCreated:
+def create_sample_case(payload: SampleCaseCreate, db: DbSession, request: Request) -> CaseCreated:
     today = today_kst()
-    case, token = sample_service.create_sample_case(db, payload.scenario, today)
+    creator = case_service.creator_for(request.app.state.settings, client_ip(request))
+    case, token = sample_service.create_sample_case(db, payload.scenario, today, creator)
     return CaseCreated(
         case_id=case.id, case_token=token, case=case_service.to_case_out(db, case, today)
     )

@@ -25,6 +25,13 @@ class Settings(BaseSettings):
     scripted_stage_delay_seconds: float = 1.0
     # 서비스 전체 하루 AI 분석 한도(계약 1.1·4.1). 넘으면 429, 샘플 그대로는 미리 만든 결과(T11-a)
     daily_analysis_limit: int = 300
+    # 시간당 한도(계약 1.1·4.3·4.10, T11-b). 넘으면 429 RATE_LIMITED
+    rate_limit_cases_per_ip_hour: int = 20
+    rate_limit_runs_per_case_hour: int = 5
+    # IP 해시 비밀값. 비우면 서버가 켜질 때 임의 값을 만든다(재시작하면 지난 기록과 안 이어짐)
+    ip_hash_secret: str | None = None
+    # 만료 사건 정리 주기(초). 0이면 켜질 때 한 번만
+    cleanup_interval_seconds: float = 600
     # 글자 추출(T13). 비우면 PATH에서 찾는다(Windows는 설치 경로를 넣는다)
     tesseract_cmd: str | None = None
     pdftoppm_cmd: str | None = None

@@ -1,20 +1,21 @@
 """사건 API(계약 4.3~4.6). 업무 로직은 `app/services/cases.py`에 있다."""
 
-from fastapi import APIRouter, Response
+from fastapi import APIRouter, Request, Response
 
 from app.db import DbSession
 from app.schemas.case import CaseCreate, CaseCreated, CaseEnvelope, CasePatch
 from app.services import cases as case_service
-from app.services.auth import AuthorizedCase
+from app.services.auth import AuthorizedCase, client_ip
 from app.services.deadline import today_kst
 
 router = APIRouter(tags=["cases"])
 
 
 @router.post("/cases", status_code=201, response_model=CaseCreated)
-def create_case(payload: CaseCreate, db: DbSession) -> CaseCreated:
+def create_case(payload: CaseCreate, db: DbSession, request: Request) -> CaseCreated:
     today = today_kst()
-    case, token = case_service.create_case(db, payload, today)
+    creator = case_service.creator_for(request.app.state.settings, client_ip(request))
+    case, token = case_service.create_case(db, payload, today, creator)
     return CaseCreated(
         case_id=case.id, case_token=token, case=case_service.to_case_out(db, case, today)
     )

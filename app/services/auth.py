@@ -5,7 +5,7 @@ import hmac
 import secrets
 from typing import Annotated
 
-from fastapi import Depends, Header
+from fastapi import Depends, Header, Request
 
 from app.db import DbSession
 from app.errors import ApiError
@@ -56,3 +56,8 @@ def get_authorized_case(
 
 # 라우터 인자 타입: 토큰을 확인한 사건
 AuthorizedCase = Annotated[Case, Depends(get_authorized_case)]
+
+
+def client_ip(request: Request) -> str | None:
+    """요청 IP(T11-b 시간당 한도). 배포는 uvicorn `--proxy-headers`라 앞단을 거친 접속 IP다."""
+    return request.client.host if request.client else None
