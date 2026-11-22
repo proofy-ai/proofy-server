@@ -119,6 +119,8 @@ tests/        계약 테스트와 기능 테스트
 docs/         문서(아래)
 ```
 
+폴더마다 맡은 일과 분석 한 번이 거치는 파일은 [`docs/architecture.md`](docs/architecture.md)에 정리했습니다.
+
 ---
 
 ## 📚 문서
@@ -127,6 +129,7 @@ docs/         문서(아래)
 
 - [`docs/screen-flow.md`](docs/screen-flow.md): 화면과 사용자 흐름
 - [`docs/agent-design-v2.md`](docs/agent-design-v2.md): AI 에이전트 설계
+- [`docs/architecture.md`](docs/architecture.md): 코드 구조(폴더별 역할)
 - [`docs/contract.md`](docs/contract.md): FE–BE API 계약(정본)
 - [`docs/erd.md`](docs/erd.md): 데이터 모델(정본)
 - [`docs/deploy.md`](docs/deploy.md): 배포 방법
