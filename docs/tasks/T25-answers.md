@@ -32,6 +32,15 @@
 | `app/services/results.py` | 저장할 때 `run.masked_narrative` = 가린 사연 + 빈 줄 + 가린 질문·답 묶음(인용 대조 기준. 답 인용도 `verified: true`가 되게). 조회 `answered` = 사건의 답 있는 질문, 답한 순서 |
 | `app/agent/scripted.py` | 이미 답한 질문과 같은 글의 질문은 다시 내지 않음(답 내용은 읽지 않음) |
 
+### 추가(11/22 사용자 결정, `docs/agent-design-v2.md` 4.6): 지난 분석 성찰 넘기기
+| 파일 | 내용 |
+|---|---|
+| `app/services/questions.py` | `previous_review(case)`: 가장 최근 성공 실행에서 어긋남·확인 못 함·진술만 항목(claim·status·note), 계획했지만 확인 못 한 항목(실행의 `VERIFY` 계획 점검 결과), 확인 필요 초안 문장 수·의견 수. 새 표 없음 |
+| `app/services/analysis.py`, `app/agent/runner.py` | `RunContext.previous`로 넘기고 runner가 사건 이름 목록으로 가림 |
+| `app/agent/compare.py` | 첫 메시지 `previousRun`. 프롬프트: 있으면 `make_plan`의 `revision`에 지난 분석과 답을 보고 무엇을 왜 바꾸는지 한 문장 |
+| `app/agent/scripted.py` | 다시 분석(지난 성공 실행이 있음)이면 계획 줄에 고정 `revision`("지난 분석과 답변을 보고 다시 확인합니다") |
+- 테스트(단위): 두 번째 분석의 첫 메시지에 `previousRun`이 있고 이름이 가려짐, 첫 분석에는 없음
+
 ### 계약 테스트(승인 필요)
 | # | 내용 |
 |---|---|

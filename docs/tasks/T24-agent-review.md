@@ -36,6 +36,14 @@
 | `app/agent/verify.py` | ② 의견·질문 거르기: 글자 수 자르기, 3개 상한, `findingIndexes`를 걸러진 뒤 번호로 다시 맞춤(빈 claim으로 빠진 항목 때문에 밀림), `lawRefs`는 `seen_law_refs`에 있고 원문에 있어야 `verified: true`(아니면 `false`로 남김) |
 | `app/agent/drafting.py` | ② 의견 검사: 법령 인용 못 찾음 `LAW_QUOTE_NOT_FOUND` / 결과 예측·확정 표현 `JUDGMENT_EXPRESSION`(초안의 `_JUDGMENT` + 의견만 "해당합니다·해당됩니다") / 근거에 없는 금액·날짜 `NUMBER_MISMATCH`. 뒤의 둘은 **초안 고쳐 쓰기 호출 1회에 같이 넣어** 고치고 다시 검사(통과하면 고친 문장, 또 걸리면 원래 문장 + `needsCheck`). 질문은 고쳐 쓰지 않음 |
 
+### 추가(11/22 사용자 결정, `docs/agent-design-v2.md` 4.3): 조사 계획과 계획 대비 점검
+| 파일 | 내용 |
+|---|---|
+| `app/agent/compare.py` | ② 도구 `make_plan(items[{claim, check, sources[]}], revision)`. 프롬프트로 첫 호출에 쓰게 함. 상한 12회에 세지 않고 실행당 2번(처음 + 수정 1회). step `TOOL_CALL` "조사 계획"/"조사 계획 수정": `확인할 것 N가지: 주장(자료) · …`, `revision`이 있으면 앞에 붙임. 출력 `findings[].planItem`(정수 또는 null) |
+| `app/agent/verify.py` | 계획 대비 점검: 계획 항목마다 `planItem`이 그 번호인 주장이 있나 → step `VERIFY` "계획한 확인 3개 중 2개를 마쳤습니다. 확인 못 한 것: …". 프롬프트가 확인 못 한 항목은 질문하게 함 |
+| `app/agent/scripted.py` | ① 고정 조사 계획 줄(GOODS 3가지, UNEXPECTED 3가지)과 "계획한 확인을 모두 마쳤습니다" 점검 줄 |
+- 테스트(단위): `make_plan` step 모양·2번 상한·상한 12회에 안 셈, 계획 대비 점검 step(가짜 SDK)
+
 ### 계약 테스트(승인 필요)
 | # | 내용 |
 |---|---|
