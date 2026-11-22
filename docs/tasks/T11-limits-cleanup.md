@@ -1,6 +1,6 @@
 # T11 운영 보호
 
-- 단계: 2단계 가짜 분석 · 예정: 11/22 오후 · 상태: T11-a 완료, T11-b 완료(PR 머지 대기) · 이슈: T11-a #64, T11-b #13 · PR: T11-a #65
+- 단계: 2단계 가짜 분석 · 예정: 11/22 오후 · 상태: 완료(T11-a·T11-b) · 이슈: T11-a #64, T11-b #13 · PR: T11-a #65, T11-b #75
 
 ## 범위
 
@@ -117,4 +117,7 @@
 - 환경변수 `RATE_LIMIT_CASES_PER_IP_HOUR`(20)·`RATE_LIMIT_RUNS_PER_CASE_HOUR`(5)·`IP_HASH_SECRET`·`CLEANUP_INTERVAL_SECONDS`(600), `.env.example`·`docs/deploy.md` 갱신(자동 배포 안 됨 → 머지 후 Manual Deploy, 429·자동 삭제 안내)
 - 테스트: `tests/test_t11_limits.py`(T11-b-1~3). `uv run python -m pytest -q` 206 passed·2 skipped, `uv run ruff check .` 통과(11/22)
 - 로컬 실서버(임시 SQLite, 한도 2): 샘플 2개 201, 3번째 `429 RATE_LIMITED`(문구 "한 시간에 사건을 2개까지 만들 수 있어요…"), 서버 시작 로그 오류 없음
-- 미검증: 배포 서버(Postgres)에서 정리 스레드가 만료 사건을 실제로 지우는지(배포 DB의 24시간 지난 사건은 다음 시작 때 지워져야 함), Render 앞단을 거친 IP가 사용자별로 다르게 잡히는지
+- PR #75 머지(dev `b2b8d82`) → Render Manual Deploy(자동 배포 안 됨, `docs/deploy.md`)
+- 배포 서버 확인(11/22 17:1x): Render Logs "Checking out commit b2b8d82", 시작 로그 오류 없음. 체험 계정 생성 201, `expiresAt` = 생성 + 24시간. 접속 로그에 실제 공인 IP가 찍힘(`--proxy-headers` 동작 → IP별 한도가 사용자별로 갈림). 자동 삭제 로그 줄은 아직 없음(배포 DB가 11/22부터라 24시간 지난 사건이 없음 = 정상)
+- 참고: Render 접속 로그에는 IP 원문이 남는다(DB에는 해시만). 프로토타입이라 그대로 둔다
+- 미검증: 배포 서버(Postgres)에서 정리 스레드가 만료 사건을 실제로 지우는지(11/23 오전 이후 첫 삭제 로그가 나와야 함)
