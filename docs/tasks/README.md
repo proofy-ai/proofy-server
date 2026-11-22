@@ -84,7 +84,7 @@ T00 규칙
 | [T13](T13-text-extraction.md) | 글자 추출(텍스트 PDF, OCR) | 완료 | #15 | #51 |
 | [T14](T14-masking.md) | 개인정보 마스킹 | 완료 | #16 | #54 |
 | [T15](T15-transaction-rows.md) | 거래 행 추출 | 완료 | #17 | #55 |
-| [T16](T16-compare-agent.md) | 대조 에이전트 | 대기 | #18 | |
+| [T16](T16-compare-agent.md) | 대조 에이전트 | 완료 | #18 | |
 | [T17](T17-draft-verify.md) | 초안 작성 + 후검증 | 대기 | #19 | |
 
 ### 4단계: 배포·마무리 — 11/22 저녁 ~ 11/23 17:00
@@ -115,6 +115,8 @@ T00 규칙
 | T09-b | `PUT`: 글 바꾸면 `edited`·`confirmed` 규칙, 새 문장 `USER`, 빠진 문장 삭제, `version` +1, `409 VERSION_CONFLICT`·`currentVersion` | T09 |
 | T09-c | 저장한 초안이 있으면 다시 분석 `409 DRAFT_HAS_EDITS`, `overwriteEditedDraft`면 새 초안(`version` 이어서) | T09 |
 | T09-d | 결과 API `draft`가 `GET /draft`와 같고 `sentencesNeedingCheck` 맞음, 다른 사건 토큰 401 | T09 |
+| T16-a | 판정 필드 부재: AI 출력 스키마의 칸이 정해 둔 목록과 같다(해제 가능성·수용 여부 등 없음) | T16 |
+| T16-b | 사건 간 근거 교차 차단: 도구가 돌려주지 않은 거래·다른 사건 서류 근거는 빠지고 step `VERIFY`, 자료 근거가 없는 `MATCH`는 `UNKNOWN` | T16 |
 
 2단계 이후 작업(결과 응답 모양, 판정 필드 부재, 상담 안내, 근거 교차 차단)의 계약 테스트는 그 작업의 구현 계획에서 목록을 제안하고 승인받는다.
 
