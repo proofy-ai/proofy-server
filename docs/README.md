@@ -8,7 +8,8 @@
 
 1. [`screen-flow.md`](screen-flow.md): 사용자가 어떤 화면을 어떤 순서로 지나가는지
 2. [`agent-design-v2.md`](agent-design-v2.md): AI 에이전트가 무엇을 어떻게 하고, 무엇을 코드가 지키는지
-3. [`proposals/v0.8-agent-interview.md`](proposals/v0.8-agent-interview.md): AI가 의견을 내고 질문하도록 바꾼 이유(인터뷰형 에이전트 제안서)
+3. [`architecture.md`](architecture.md): 코드 폴더가 각각 무엇을 맡고, 분석 한 번이 어떤 파일을 거치는지
+4. [`proposals/v0.8-agent-interview.md`](proposals/v0.8-agent-interview.md): AI가 의견을 내고 질문하도록 바꾼 이유(인터뷰형 에이전트 제안서)
 
 ---
 
@@ -32,6 +33,7 @@
 - **API 필드 이름·타입을 확인한다** → [`contract.md`](contract.md) 4절(엔드포인트), 2절(코드값)
 - **오류 코드가 무슨 뜻인가** → [`contract.md`](contract.md) 1.1절
 - **AI가 어디까지 정하고 어디서부터 코드가 정하나** → [`agent-design-v2.md`](agent-design-v2.md) 2절
+- **이 기능의 코드가 어느 폴더·파일에 있나** → [`architecture.md`](architecture.md)
 - **AI가 쓴 글을 어떻게 검증하나** → [`agent-design-v2.md`](agent-design-v2.md) 4.3·4.5절
 - **DB에 무엇이 저장되나(개인정보 포함)** → [`erd.md`](erd.md) 1절 원칙, 3절 테이블
 - **배포하거나 배포 서버를 다룬다** → [`deploy.md`](deploy.md)
@@ -45,6 +47,7 @@
 - `contract.md` · `erd.md` · `erd-review.md`: API와 데이터 정본
 - `agent-design-v2.md` · `agent-design.md`: AI 에이전트 설계(v2가 정본)
 - `screen-flow.md`: 화면과 사용자 흐름
+- `architecture.md`: 코드 구조(폴더별 역할, 호출 방향)
 - `deploy.md`: 배포 안내(Render + Neon)
 - `legal/`: 법령 원문과 출처
 - `proposals/`: 큰 변경을 정하기 전에 쓴 제안서
