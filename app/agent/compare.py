@@ -23,19 +23,20 @@ from datetime import date
 from typing import Any
 
 from app.agent import law
+from app.agent.drafting import JUDGMENT as _JUDGMENT
 from app.agent.drafting import PROMPT_VERSION as DRAFT_PROMPT_VERSION
 from app.agent.drafting import Drafter
 from app.agent.llm import ClaudeClient, Deadline, limit_items, tool_error, tool_result, user_text
 from app.agent.masking import MaskedText, mask_text, seal_payload
 from app.agent.output import AnalysisOutput, TransactionRow
 from app.agent.runner import RunContext
-from app.agent.scripted import DOC_TYPE_LABELS
+from app.agent.scripted import DOC_TYPE_LABELS, plan_summary
 from app.agent.steps import AgentError, Recorder
 from app.agent.verify import CONFLICT_FIELDS, STATUSES, check_output
 
 logger = logging.getLogger(__name__)
 
-PROMPT_VERSION = "t16-v1"
+PROMPT_VERSION = "t24-v1"
 # 도구 호출 총횟수(한 턴 안의 병렬 호출 포함)와 모델 요청 횟수 상한
 # 법령 조회(T23)가 1~3회 더 들어 8 → 12, 10 → 14로 늘렸다(T23 결정 3)
 MAX_TOOL_CALLS = 12
@@ -43,6 +44,11 @@ MAX_REQUESTS = 14
 # 첫 메시지에 보여 줄 서류 앞부분 줄 수
 PREVIEW_LINES = 5
 REASON_CHARS = 150
+# 조사 계획(T24): 실행당 make_plan 횟수(처음 + 수정 1회), 항목 수, 화면 글자 수
+MAX_PLAN_CALLS = 2
+MAX_PLAN_ITEMS = 6
+PLAN_CLAIM_CHARS = 30
+PLAN_SOURCES = {"TRANSACTIONS": "거래내역", "EVIDENCE": "서류", "LAW": "법령", "NARRATIVE": "사연"}
 
 _STATUS_WORDS = {
     "MATCH": "일치",
@@ -74,6 +80,45 @@ _REASON = {
 }
 
 TOOLS: list[dict[str, Any]] = [
+    {
+        "name": "make_plan",
+        "description": (
+            "조사를 시작하기 전에 계획을 적는다. 사연에서 확인할 주장과 각각 어떤 자료로 확인할지. "
+            "사용자 화면에 '조사 계획'으로 보인다. "
+            "조사 중 계획을 바꿔야 하면 한 번 더 부를 수 있다. "
+            "조회 횟수 한도에 세지 않는다."
+        ),
+        "strict": True,
+        "input_schema": _object(
+            {
+                "items": {
+                    "type": "array",
+                    "items": _object(
+                        {
+                            "claim": {
+                                "type": "string",
+                                "description": "확인할 주장을 짧게. 예: '11/8 입금'",
+                            },
+                            "check": {"type": "string", "description": "무엇을 어떻게 확인할지"},
+                            "sources": {
+                                "type": "array",
+                                "items": {"type": "string", "enum": list(PLAN_SOURCES)},
+                            },
+                        }
+                    ),
+                },
+                "revision": _nullable(
+                    {
+                        "type": "string",
+                        "description": (
+                            "previousRun이 있거나 계획을 고칠 때, 무엇을 왜 바꾸는지 한 문장. "
+                            "처음 분석이면 null"
+                        ),
+                    }
+                ),
+            }
+        ),
+    },
     {
         "name": "get_transactions",
         "description": (
@@ -140,6 +185,8 @@ _SOURCE = _object(
     }
 )
 
+_LAW_REF = _object({"ref": {"type": "string"}, "quote": {"type": "string"}})
+
 OUTPUT_SCHEMA: dict[str, Any] = _object(
     {
         "findings": {
@@ -159,6 +206,7 @@ OUTPUT_SCHEMA: dict[str, Any] = _object(
                         )
                     ),
                     "sources": {"type": "array", "items": _SOURCE},
+                    "planItem": _nullable({"type": "integer"}),
                 }
             ),
         },
@@ -175,6 +223,27 @@ OUTPUT_SCHEMA: dict[str, Any] = _object(
                 }
             ),
         },
+        "opinions": {
+            "type": "array",
+            "items": _object(
+                {
+                    "text": {"type": "string"},
+                    "findingIndexes": {"type": "array", "items": {"type": "integer"}},
+                    "lawRefs": {"type": "array", "items": _LAW_REF},
+                }
+            ),
+        },
+        "questions": {
+            "type": "array",
+            "items": _object(
+                {
+                    "text": {"type": "string"},
+                    "why": {"type": "string"},
+                    "findingIndexes": {"type": "array", "items": {"type": "integer"}},
+                    "lawRefs": {"type": "array", "items": _LAW_REF},
+                }
+            ),
+        },
     }
 )
 
@@ -185,13 +254,19 @@ SYSTEM_PROMPT = f"""\
 말하지 않습니다. 법률 조언도 하지 않습니다.
 
 ## 할 일
-1. 사연에서 자료로 확인할 수 있는 사실 주장을 3~6개 고릅니다(입금 날짜·금액·상대, 거래 내용과 합의
-   조건, 그 뒤에 한 일 등). 감정이나 바람은 고르지 않습니다.
-2. 주장마다 도구로 자료를 찾아봅니다. 거래는 get_transactions, 서류 글은 get_evidence_regions.
+1. 계획: 맨 처음에 make_plan을 부릅니다. 사연에서 자료로 확인할 수 있는 사실 주장을 3~6개 고르고
+   (입금 날짜·금액·상대, 거래 내용과 합의 조건, 그 뒤에 한 일 등. 감정이나 바람은 고르지 않음)
+   각각 어떤 자료로 확인할지 적습니다. 이의제기 사유가 될 법령 근거를 찾는 것도 항목으로 넣습니다.
+   첫 메시지에 previousRun(지난 분석에서 어긋났거나 확인 못 한 것)과 answers(사용자의 답)가 있으면
+   그것을 보고 이번에 무엇을 다르게 확인할지 정하고 revision에 한 문장으로 씁니다.
+   조사 중 계획이 틀렸다고 판단되면 make_plan을 한 번 더 불러 고칠 수 있습니다.
+2. 조사: 계획대로 도구로 자료를 찾아봅니다. 거래는 get_transactions, 서류 글은
+   get_evidence_regions, 법령은 search_law로 찾고 get_law_article로 원문을 읽습니다.
    도구의 reason에는 무엇을 왜 찾는지 한 문장을 씁니다. 사용자 화면에 그대로 보입니다.
-   도구는 모두 합쳐 {MAX_TOOL_CALLS}번까지 쓸 수 있습니다.
+   조회 도구는 모두 합쳐 {MAX_TOOL_CALLS}번까지 쓸 수 있습니다.
    넓게 한 번 조회하고 필요한 것만 좁혀 보세요.
-3. 다 봤으면 정해진 JSON 형식으로 답합니다.
+3. 다 봤으면 정해진 JSON 형식으로 답합니다. findings의 planItem에는 그 주장이 계획의 몇 번 항목
+   (0부터)을 확인한 것인지 적습니다. 계획에 없던 주장이면 null입니다.
 
 ## status
 - MATCH: 자료에 같은 내용이 있다
@@ -218,6 +293,24 @@ SYSTEM_PROMPT = f"""\
 - STATEMENT_ONLY·UNKNOWN 주장을 뒷받침할 자료를 0~3개 권합니다. label은 서류 이름, reason은 왜
   필요한지 한 문장, acceptedDocTypes는 그 자료로 받을 서류 종류입니다.
 - 첫 메시지의 fixedChecklist에 이미 있는 서류는 권하지 않습니다. 권할 것이 없으면 빈 배열입니다.
+
+## opinions(조건부 의견, 0~3개)
+- 자료와 법령을 함께 보고, 사용자가 이의제기에서 어떤 사정으로 설명할 수 있어 보이는지 씁니다.
+  형식: "말씀하신 내용과 [자료]를 기준으로 보면, [사실]은 [법령상 사유]로 설명할 수 있는 사정으로
+  보여요." 해요체로 씁니다.
+- 기댄 주장의 번호(findingIndexes, findings 순서 0부터)와 법령 근거(lawRefs)를 답니다. lawRefs의
+  ref는 이번에 search_law·get_law_article이 돌려준 ref만, quote는 get_law_article 원문에서 고치지
+  않고 그대로 복사한 부분입니다. 원문을 읽지 않은 조항은 쓰지 않습니다.
+- 결과를 예측하지 않습니다: "해제될 거예요", "가능성이 높아요", "받아들여질 거예요", "확실해요",
+  "~에 해당합니다" 같은 말을 쓰지 않습니다. 은행이 판단한다는 전제로, 설명할 수 있는 사정까지만
+  말합니다. 사람을 평가하지 않습니다.
+- 금액·날짜는 기댄 주장의 근거에 있는 값만 씁니다. 근거가 약하면 의견을 내지 않습니다.
+
+## questions(사용자에게 묻기, 0~3개)
+- 소명에 부족한 사실을 묻습니다: CONFLICT 주장이 왜 다른지, STATEMENT_ONLY 주장을 보여 줄 자료가
+  있는지, 이의제기신청서 사유에 필요한데 사연에 없는 사실, 계획했지만 확인하지 못한 것.
+- text는 사용자에게 하는 질문 한 문장(해요체), why는 왜 묻는지 한 문장입니다.
+- answers에 이미 답한 질문은 다시 묻지 않습니다. 답으로 풀리지 않았으면 더 구체적으로 묻습니다.
 """
 
 
@@ -230,6 +323,9 @@ class ClaudeAnalyzer:
         self.seen_transactions: set[str] = set()
         # 이번 실행에서 법령 도구가 실제로 돌려준 조항 ref(T23, 의견·질문 근거 검증 기준)
         self.seen_law_refs: set[str] = set()
+        # 마지막 조사 계획의 항목 수(T24, 계획 대비 점검)와 계획 도구 호출 수
+        self.plan: list[str] = []
+        self._plan_calls = 0
         self._tool_calls = 0
 
     def extract(self, ctx: RunContext, rec: Recorder, out: AnalysisOutput) -> None:
@@ -274,9 +370,18 @@ class ClaudeAnalyzer:
         if raw is None:
             raise AgentError()
 
-        checked = check_output(raw, out.extractions, self.seen_transactions, DOC_TYPE_LABELS)
+        checked = check_output(
+            raw,
+            out.extractions,
+            self.seen_transactions,
+            DOC_TYPE_LABELS,
+            seen_law_refs=self.seen_law_refs,
+            plan_size=len(self.plan),
+        )
         out.findings += checked.findings
         out.recommended += checked.recommended
+        out.opinions += checked.opinions
+        out.questions += checked.questions
         if checked.dropped:
             shown = " / ".join(checked.dropped[:3])
             more = f" 외 {len(checked.dropped) - 3}건" if len(checked.dropped) > 3 else ""
@@ -291,6 +396,8 @@ class ClaudeAnalyzer:
         for f in out.findings:
             if f.status == "CONFLICT":
                 rec.step("CONFLICT", "자료와 어긋나는 내용", f.note)
+        if self.plan:
+            rec.step("VERIFY", "계획 점검", _plan_check(self.plan, checked.plan_covered))
 
     def draft(self, ctx: RunContext, rec: Recorder, out: AnalysisOutput) -> None:
         """③ 초안과 ④ 후검증(T17, `agent/drafting.py`). 대조와 같은 클라이언트라 비용이 이어진다."""
@@ -349,6 +456,10 @@ class ClaudeAnalyzer:
     def _run_tool(
         self, block: Any, ctx: RunContext, rec: Recorder, out: AnalysisOutput
     ) -> dict[str, Any]:
+        if block.name == "make_plan":
+            # 계획은 조회 한도에 세지 않는다(agent-design-v2 4.3)
+            args = block.input if isinstance(block.input, dict) else {}
+            return self._make_plan(block.id, args, rec)
         self._tool_calls += 1
         if self._tool_calls > MAX_TOOL_CALLS:
             return tool_error(
@@ -367,6 +478,29 @@ class ClaudeAnalyzer:
         if block.name == "get_law_article":
             return self._get_law_article(block.id, args, reason, rec)
         return tool_error(block.id, "없는 도구입니다.")
+
+    def _make_plan(self, tool_use_id: str, args: dict[str, Any], rec: Recorder) -> dict[str, Any]:
+        self._plan_calls += 1
+        if self._plan_calls > MAX_PLAN_CALLS:
+            return tool_error(tool_use_id, "계획은 한 번만 고칠 수 있습니다. 조사를 이어 가세요.")
+        items: list[tuple[str, str]] = []
+        for item in (args.get("items") or [])[:MAX_PLAN_ITEMS]:
+            if not isinstance(item, dict):
+                continue
+            claim = str(item.get("claim") or "").strip()[:PLAN_CLAIM_CHARS]
+            if not claim:
+                continue
+            kinds = [PLAN_SOURCES[k] for k in item.get("sources") or [] if k in PLAN_SOURCES]
+            items.append((claim, "·".join(dict.fromkeys(kinds)) or "자료"))
+        if not items:
+            return tool_error(tool_use_id, "확인할 주장을 하나 이상 적으세요.")
+        revision = str(args.get("revision") or "").strip()[:REASON_CHARS] or None
+        if revision and _JUDGMENT.search(revision):
+            revision = None  # 판정처럼 읽히는 이유는 화면에 보이지 않는다(계약 4.10)
+        title = "조사 계획" if self._plan_calls == 1 else "조사 계획 수정"
+        rec.step("TOOL_CALL", title, plan_summary(tuple(items), revision))
+        self.plan = [claim for claim, _ in items]
+        return tool_result(tool_use_id, seal_payload({"accepted": True, "itemCount": len(items)}))
 
     def _search_law(
         self, tool_use_id: str, args: dict[str, Any], reason: str, rec: Recorder
@@ -452,6 +586,15 @@ class ClaudeAnalyzer:
         label = DOC_TYPE_LABELS.get(ref.doc_type, "서류")
         rec.step("TOOL_CALL", f"{label} 글 조회", f"{reason} → {len(regions)}줄")
         return tool_result(tool_use_id, seal_payload({"regions": kept, "notice": _notice(notice)}))
+
+
+def _plan_check(plan: list[str], covered: set[int]) -> str:
+    """계획 대비 점검 문장(T24). 계획 항목마다 그 번호를 단 주장이 있으면 확인한 것으로 본다."""
+    done = [i for i in range(len(plan)) if i in covered]
+    if len(done) == len(plan):
+        return f"계획한 확인 {len(plan)}개를 모두 마쳤습니다."
+    missed = ", ".join(f"'{c}'" for i, c in enumerate(plan) if i not in covered)
+    return f"계획한 확인 {len(plan)}개 중 {len(done)}개를 마쳤습니다. 확인 못 한 것: {missed}"
 
 
 def _record_usage(out: AnalysisOutput, client: ClaudeClient, prompt_version: str) -> None:

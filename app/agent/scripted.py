@@ -10,11 +10,15 @@ import re
 import time
 from datetime import date, timedelta
 
+from app.agent import law
 from app.agent.output import (
     AnalysisOutput,
     Conflict,
     DraftSentence,
     Finding,
+    LawRef,
+    Opinion,
+    Question,
     RecommendedDoc,
     Source,
     TransactionRow,
@@ -51,6 +55,24 @@ GOODS_ROWS: tuple[_Row, ...] = (
 UNEXPECTED_ROWS: tuple[_Row, ...] = (
     ("t1", date(YEAR, 11, 9), "OUT", 23_000, None),
     ("t2", date(YEAR, 11, 12), "IN", 100_000, "이*호"),
+)
+
+# 조사 계획(T24): (확인할 주장, 볼 자료)
+PLANS: dict[str, tuple[tuple[str, str], ...]] = {
+    "GOODS": (("11/8 입금", "거래내역"), ("합의 금액", "대화내역"), ("이의제기 사유", "법령")),
+    "UNEXPECTED": (
+        ("11월 모르는 입금", "거래내역"),
+        ("협박 문자", "대화내역"),
+        ("이의제기 사유", "법령"),
+    ),
+}
+PLAN_OTHER: tuple[tuple[str, str], ...] = (("사연의 입금", "사연"),)
+
+# 의견의 근거 조항 인용(법 제7조 제1항 제2호·제3호 원문 그대로)
+GOODS_LAW_QUOTE = "재화 또는 용역의 공급에 대한 대가로 받았거나"
+UNEXPECTED_LAW_QUOTE = (
+    "해당 계좌등이 피해자산 편취를 위하여 이용된 계좌등이 아니라는 사실을 "
+    "객관적인 자료로 소명하는 경우"
 )
 
 # 서류 속 인용 문구와 그 줄 번호(위에서 0부터).
@@ -109,6 +131,9 @@ class ScriptedAnalyzer:
 
     def compare(self, ctx: RunContext, rec: Recorder, out: AnalysisOutput) -> None:
         self._pause(ctx)
+        plan = PLANS.get(ctx.inflow_type, PLAN_OTHER)
+        # 조사 계획(T24, agent-design-v2 4.3). 실제 분석의 `make_plan` 줄과 같은 모양
+        rec.step("TOOL_CALL", "조사 계획", plan_summary(plan))
         if ctx.inflow_type == "GOODS":
             self._goods(ctx, rec, out)
         elif ctx.inflow_type == "UNEXPECTED":
@@ -121,6 +146,7 @@ class ScriptedAnalyzer:
         for f in out.findings:
             if f.conflict is not None:
                 rec.step("CONFLICT", "자료와 어긋나는 내용", f.note)
+        rec.step("VERIFY", "계획 점검", f"계획한 확인 {len(plan)}개를 모두 마쳤습니다.")
 
     def draft(self, ctx: RunContext, rec: Recorder, out: AnalysisOutput) -> None:
         self._pause(ctx)
@@ -209,6 +235,36 @@ class ScriptedAnalyzer:
                 sources=(Source("NARRATIVE", quote="물건은 다음 날 택배로 보냈습니다"),),
             ),
         ]
+        rec.step(
+            "TOOL_CALL",
+            "법령 조회",
+            "물품 대금이 이의제기 사유가 되는지 확인하려고 → 법 제7조",
+        )
+        out.opinions.append(
+            Opinion(
+                text=(
+                    "말씀하신 내용과 거래내역을 기준으로 보면, 11월 8일에 받은 150,000원은 "
+                    "물건값으로 받은 돈이라고 설명할 수 있는 사정으로 보여요."
+                ),
+                finding_indexes=(0,),
+                law_refs=_refs(("LAW:7", GOODS_LAW_QUOTE)),
+            )
+        )
+        out.questions += [
+            Question(
+                text=(
+                    "대화에서는 '3개 12만원'이라고 했는데 입금은 15만 원이에요. "
+                    "금액이 달라진 이유가 있나요?"
+                ),
+                why="자료와 어긋난 금액은 은행이 설명을 요청할 수 있어요.",
+                finding_indexes=(1,),
+            ),
+            Question(
+                text="물건을 보낸 택배 송장이나 배송 조회 화면이 있나요?",
+                why="'다음 날 택배로 보냈다'를 뒷받침하는 자료가 아직 없어요.",
+                finding_indexes=(2,),
+            ),
+        ]
         out.recommended.append(
             RecommendedDoc(
                 label="택배 발송 기록(송장 번호 화면)",
@@ -289,6 +345,38 @@ class ScriptedAnalyzer:
                 sources=(Source("NARRATIVE", quote="바로 은행에 알렸습니다"),),
             ),
         ]
+        rec.step(
+            "TOOL_CALL",
+            "법령 조회",
+            "모르는 사람이 보낸 돈이 이의제기 사유가 되는지 확인하려고 → 법 제7조",
+        )
+        out.opinions.append(
+            Opinion(
+                text=(
+                    "말씀하신 내용과 협박 문자·거래내역을 기준으로 보면, "
+                    "모르는 사람이 돈을 보낸 뒤 신고를 빌미로 돈을 요구한 경우로, "
+                    "이 계좌가 피해자산을 가로채는 데 쓰이지 않았다고 "
+                    "설명할 수 있는 사정으로 보여요."
+                ),
+                finding_indexes=(1, 2),
+                law_refs=_refs(("LAW:7", UNEXPECTED_LAW_QUOTE)),
+            )
+        )
+        out.questions += [
+            Question(
+                text=(
+                    "사연에는 11월 11일이라고 쓰셨는데 거래내역서에는 11월 12일 입금으로 나와요. "
+                    "날짜를 다시 확인해 주실 수 있나요?"
+                ),
+                why="사연과 자료의 날짜가 다르면 은행이 설명을 요청할 수 있어요.",
+                finding_indexes=(0,),
+            ),
+            Question(
+                text="은행이나 경찰에 알린 기록(신고 접수증, 상담 내역 화면 등)이 있나요?",
+                why="'바로 은행에 알렸다'를 보여 주는 자료가 아직 없어요.",
+                finding_indexes=(3,),
+            ),
+        ]
 
     @staticmethod
     def _statement_only(ctx: RunContext, out: AnalysisOutput) -> None:
@@ -303,6 +391,18 @@ class ScriptedAnalyzer:
                 sources=(Source("NARRATIVE", quote=sentence),),
             )
         )
+
+
+def _refs(*pairs: tuple[str, str]) -> tuple[LawRef, ...]:
+    """정해 둔 인용도 실제 법령 원문과 대조해 label·verified를 붙인다(T23)."""
+    refs = (law.law_ref(ref, quote) for ref, quote in pairs)
+    return tuple(r for r in refs if r is not None)
+
+
+def plan_summary(items: tuple[tuple[str, str], ...], revision: str | None = None) -> str:
+    """조사 계획 step 문장. 실제 분석(`make_plan`)도 같은 꼴로 쓴다."""
+    body = f"확인할 것 {len(items)}가지: " + " · ".join(f"{c}({s})" for c, s in items)
+    return f"{revision} → {body}" if revision else body
 
 
 def _goods_draft() -> list[DraftSentence]:

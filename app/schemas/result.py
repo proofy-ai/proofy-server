@@ -70,6 +70,55 @@ class UnreadEvidence(CamelModel):
     reason: str
 
 
+LawSource = Literal["LAW", "DECREE", "FORM4"]
+
+AGENT_REVIEW_NOTICE = (
+    "올린 자료와 말씀하신 내용을 기준으로 AI가 정리한 의견입니다. "
+    "Proofy는 변호사가 아니며, 지급정지 해제 여부는 은행이 판단합니다."
+)
+
+
+class LawRefOut(CamelModel):
+    """근거 조항(계약 4.11). `label`·`verified`는 서버가 법령 원문과 대조해 붙인다."""
+
+    source: LawSource
+    label: str
+    quote: str
+    verified: bool
+
+
+class AgentOpinion(CamelModel):
+    opinion_id: str
+    text: str
+    finding_ids: list[str]
+    law_refs: list[LawRefOut]
+    needs_check: bool
+
+
+class AgentQuestion(CamelModel):
+    question_id: str
+    text: str
+    why: str
+    finding_ids: list[str]
+    law_refs: list[LawRefOut]
+
+
+class AnsweredQuestion(CamelModel):
+    question_id: str
+    text: str
+    answer: str
+    answered_at: UtcDatetime
+
+
+class AgentReview(CamelModel):
+    """AI 조건부 의견·질문(계약 v0.8 4.11). 판정 필드(해제 가능성 등)는 없다."""
+
+    notice: str
+    opinions: list[AgentOpinion]
+    questions: list[AgentQuestion]
+    answered: list[AnsweredQuestion]
+
+
 class ResultSummary(CamelModel):
     finding_counts: dict[FindingStatus, int]
     missing_documents: int
@@ -85,6 +134,8 @@ class ResultResponse(CamelModel):
     precomputed: bool
     # 상담 안내(T10). 지금은 항상 null
     referral: dict | None
+    # AI 의견·질문(T24). 의견·질문·답한 기록이 모두 없으면 null(v0.8 전 결과 포함)
+    agent_review: AgentReview | None
     ai_notice: str
     deadline: Deadline
     findings: list[FindingOut]

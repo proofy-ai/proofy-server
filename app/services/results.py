@@ -42,6 +42,7 @@ from app.services.checklist import get_checklist
 from app.services.clock import utc_now
 from app.services.deadline import compute_deadline
 from app.services.drafts import FindingInfo, current_draft, replace_draft, to_draft_out
+from app.services.review import agent_review, save_review
 from app.services.runs import latest_succeeded_run
 
 logger = logging.getLogger("proofy.results")
@@ -104,6 +105,7 @@ def save_output(db: Session, run: AnalysisRun, out: AnalysisOutput) -> None:
         for seq, finding in enumerate(out.findings, start=1)
     ]
     replace_draft(db, run, out.draft_sentences, saved)
+    save_review(db, run, out, [f.finding_id for f in saved])
 
     for doc in out.recommended[:MAX_RECOMMENDED]:
         db.add(
@@ -302,6 +304,7 @@ def get_result(db: Session, case: Case, today: date) -> ResultResponse:
         generated_at=run.finished_at or run.started_at,
         precomputed=run.precomputed,
         referral=None,
+        agent_review=agent_review(db, run),
         ai_notice=AI_NOTICE,
         deadline=compute_deadline(case.public_notice_date, today),
         findings=findings,

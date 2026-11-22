@@ -16,11 +16,17 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
+from app.agent import law
 from app.agent.extract import Extraction
 from app.agent.output import (
+    MAX_OPINIONS,
+    MAX_QUESTIONS,
     MAX_RECOMMENDED,
     Conflict,
     Finding,
+    LawRef,
+    Opinion,
+    Question,
     RecommendedDoc,
     Source,
 )
@@ -32,6 +38,10 @@ NOTE_CHARS = 300
 QUOTE_CHARS = 200
 CONFLICT_CHARS = 100
 LABEL_CHARS = 60
+OPINION_CHARS = 400
+QUESTION_CHARS = 200
+WHY_CHARS = 200
+MAX_LAW_REFS = 3
 
 STATUSES = ("MATCH", "CONFLICT", "STATEMENT_ONLY", "UNKNOWN")
 CONFLICT_FIELDS = ("AMOUNT", "DATE", "COUNTERPARTY", "OTHER")
@@ -50,6 +60,11 @@ class Checked:
     recommended: list[RecommendedDoc] = field(default_factory=list)
     # 뺀 근거·고친 항목 설명(step `VERIFY`에 남긴다)
     dropped: list[str] = field(default_factory=list)
+    # 의견·질문(T24). 근거 번호는 `findings`(걸러진 뒤) 순서로 다시 맞춘 것
+    opinions: list[Opinion] = field(default_factory=list)
+    questions: list[Question] = field(default_factory=list)
+    # 확인한 계획 항목 번호(T24, 계획 대비 점검)
+    plan_covered: set[int] = field(default_factory=set)
 
 
 def _clip(value: Any, limit: int) -> str:
@@ -61,17 +76,34 @@ def check_output(
     extractions: dict[str, Extraction],
     seen_transactions: Iterable[str],
     doc_types: Iterable[str],
+    seen_law_refs: Iterable[str] = (),
+    plan_size: int = 0,
 ) -> Checked:
     """AI 출력(`compare.OUTPUT_SCHEMA` 모양)을 걸러 분석 출력 모양으로 바꾼다."""
     seen = set(seen_transactions)
     valid_doc_types = set(doc_types)
     out = Checked()
-    for i, item in enumerate((raw.get("findings") or [])[:MAX_FINDINGS], start=1):
+    # AI가 쓴 번호(0부터) → 걸러진 뒤 번호. 빈 주장이 빠지면 뒤 번호가 밀린다
+    index_map: dict[int, int] = {}
+    for i, item in enumerate((raw.get("findings") or [])[:MAX_FINDINGS]):
         if not isinstance(item, dict):
             continue
-        finding = _finding(i, item, extractions, seen, out.dropped)
+        finding = _finding(i + 1, item, extractions, seen, out.dropped)
         if finding is not None:
+            index_map[i] = len(out.findings)
             out.findings.append(finding)
+            plan_item = item.get("planItem")
+            if isinstance(plan_item, int) and 0 <= plan_item < plan_size:
+                out.plan_covered.add(plan_item)
+    laws = set(seen_law_refs)
+    for item in (raw.get("opinions") or [])[:MAX_OPINIONS]:
+        opinion = _opinion(item, index_map, laws)
+        if opinion is not None:
+            out.opinions.append(opinion)
+    for item in (raw.get("questions") or [])[:MAX_QUESTIONS]:
+        question = _question(item, index_map, laws)
+        if question is not None:
+            out.questions.append(question)
     for item in raw.get("recommendedDocs") or []:
         if len(out.recommended) >= MAX_RECOMMENDED:
             break
@@ -156,6 +188,66 @@ def _source(
             return None
         return Source("TRANSACTION", transaction_key=key)
     return None
+
+
+def _indexes(raw: Any, index_map: dict[int, int]) -> tuple[int, ...]:
+    """없는 번호는 버린다(원칙 3)."""
+    values = raw if isinstance(raw, list) else []
+    return tuple(
+        dict.fromkeys(index_map[i] for i in values if isinstance(i, int) and i in index_map)
+    )
+
+
+def _law_refs(raw: Any, laws: set[str]) -> tuple[tuple[LawRef, ...], bool]:
+    """근거 조항을 서버가 원문과 대조한 모양으로. 두 번째 값은 확인 못 한 조항이 있었나.
+
+    이번 실행에서 도구가 돌려준 조항이고 인용이 그 원문에 있어야 `verified`.
+    없는 조항(ref)은 칩을 만들 수 없어 빼고 확인 못 함으로 센다.
+    """
+    refs: list[LawRef] = []
+    missing = False
+    for item in (raw if isinstance(raw, list) else [])[:MAX_LAW_REFS]:
+        if not isinstance(item, dict):
+            continue
+        quote = _clip(item.get("quote"), QUOTE_CHARS)
+        ref = law.law_ref(str(item.get("ref") or ""), quote, laws) if quote else None
+        if ref is None:
+            missing = True
+            continue
+        missing = missing or not ref.verified
+        refs.append(ref)
+    return tuple(refs), missing
+
+
+def _opinion(item: Any, index_map: dict[int, int], laws: set[str]) -> Opinion | None:
+    if not isinstance(item, dict):
+        return None
+    text = _clip(item.get("text"), OPINION_CHARS)
+    if not text:
+        return None
+    refs, missing = _law_refs(item.get("lawRefs"), laws)
+    return Opinion(
+        text=text,
+        finding_indexes=_indexes(item.get("findingIndexes"), index_map),
+        law_refs=refs,
+        # 결과 예측·숫자 검사는 초안 단계(`drafting.check_opinion`)가 하고 고쳐 쓰기에 넣는다
+        check_reason="LAW_QUOTE_NOT_FOUND" if missing else None,
+    )
+
+
+def _question(item: Any, index_map: dict[int, int], laws: set[str]) -> Question | None:
+    if not isinstance(item, dict):
+        return None
+    text = _clip(item.get("text"), QUESTION_CHARS)
+    if not text:
+        return None
+    refs, _ = _law_refs(item.get("lawRefs"), laws)
+    return Question(
+        text=text,
+        why=_clip(item.get("why"), WHY_CHARS) or "소명에 필요한 사실이에요.",
+        finding_indexes=_indexes(item.get("findingIndexes"), index_map),
+        law_refs=refs,
+    )
 
 
 def _recommended(item: Any, valid_doc_types: set[str]) -> RecommendedDoc | None:
