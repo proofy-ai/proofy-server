@@ -2,7 +2,9 @@
 
 Claude가 조회 도구를 골라 쓰며 사연과 자료를 비교한다.
 
-- AI에는 거래내역을 통째로 주지 않고 조회 도구 2개를 준다. 도구는 이 사건의 행·줄만 돌려준다.
+- AI에는 거래내역을 통째로 주지 않고 조회 도구를 준다. 거래·서류 도구는 이 사건의 행·줄만 돌려준다.
+- 법령 조회 도구 2개(T23, `agent/law.py`)는 법령 원문을 조 단위로 찾아 준다(RAG).
+  이번 실행에서 돌려준 조항(`seen_law_refs`)만 의견·질문의 근거 조항으로 인정한다(T24).
 - 도구 인자 `reason`(조회 이유)은 필수이고 step `TOOL_CALL`의 `summary`로 4번 화면에 보인다.
 - 최종 답은 구조화 출력(`OUTPUT_SCHEMA`). 판정 필드(해제 가능성, 수용 여부 등)는
   스키마에 없다(원칙 1).
@@ -20,6 +22,7 @@ import re
 from datetime import date
 from typing import Any
 
+from app.agent import law
 from app.agent.drafting import PROMPT_VERSION as DRAFT_PROMPT_VERSION
 from app.agent.drafting import Drafter
 from app.agent.llm import ClaudeClient, Deadline, limit_items, tool_error, tool_result, user_text
@@ -34,8 +37,9 @@ logger = logging.getLogger(__name__)
 
 PROMPT_VERSION = "t16-v1"
 # 도구 호출 총횟수(한 턴 안의 병렬 호출 포함)와 모델 요청 횟수 상한
-MAX_TOOL_CALLS = 8
-MAX_REQUESTS = 10
+# 법령 조회(T23)가 1~3회 더 들어 8 → 12, 10 → 14로 늘렸다(T23 결정 3)
+MAX_TOOL_CALLS = 12
+MAX_REQUESTS = 14
 # 첫 메시지에 보여 줄 서류 앞부분 줄 수
 PREVIEW_LINES = 5
 REASON_CHARS = 150
@@ -103,6 +107,26 @@ TOOLS: list[dict[str, Any]] = [
                 "page": _nullable({"type": "integer"}),
             }
         ),
+    },
+    {
+        "name": "search_law",
+        "description": (
+            "통신사기피해환급법·같은 법 시행령·별지 제4호 이의제기신청서에서 "
+            "낱말이 맞는 조항을 찾는다. "
+            "조항마다 ref, 이름, 제목, 앞부분을 돌려준다. 전문은 get_law_article로 읽는다. "
+            "예: query '재화 용역 대가 이의제기', '시행령 제7조'"
+        ),
+        "strict": True,
+        "input_schema": _object({"reason": _REASON, "query": {"type": "string"}}),
+    },
+    {
+        "name": "get_law_article",
+        "description": (
+            "조항 하나의 원문 전체를 읽는다. ref는 search_law가 돌려준 값"
+            "(예: LAW:7 법 제7조, DECREE:7 시행령 제7조, FORM4 별지 제4호)."
+        ),
+        "strict": True,
+        "input_schema": _object({"reason": _REASON, "ref": {"type": "string"}}),
     },
 ]
 
@@ -204,6 +228,8 @@ class ClaudeAnalyzer:
         self._client = client
         # 이번 실행에서 도구가 실제로 돌려준 거래 ID(후검증 기준)
         self.seen_transactions: set[str] = set()
+        # 이번 실행에서 법령 도구가 실제로 돌려준 조항 ref(T23, 의견·질문 근거 검증 기준)
+        self.seen_law_refs: set[str] = set()
         self._tool_calls = 0
 
     def extract(self, ctx: RunContext, rec: Recorder, out: AnalysisOutput) -> None:
@@ -336,7 +362,38 @@ class ClaudeAnalyzer:
             return self._get_transactions(block.id, args, reason, rec, out)
         if block.name == "get_evidence_regions":
             return self._get_regions(block.id, args, reason, ctx, rec, out)
+        if block.name == "search_law":
+            return self._search_law(block.id, args, reason, rec)
+        if block.name == "get_law_article":
+            return self._get_law_article(block.id, args, reason, rec)
         return tool_error(block.id, "없는 도구입니다.")
+
+    def _search_law(
+        self, tool_use_id: str, args: dict[str, Any], reason: str, rec: Recorder
+    ) -> dict[str, Any]:
+        found = law.search(str(args.get("query") or ""))
+        self.seen_law_refs.update(str(item["ref"]) for item in found)
+        names = ", ".join(str(item["label"]) for item in found[:3])
+        result = f"조항 {len(found)}개" + (f"({names})" if names else "")
+        rec.step("TOOL_CALL", "법령 조회", f"{reason} → {result}")
+        return tool_result(tool_use_id, seal_payload({"articles": found}))
+
+    def _get_law_article(
+        self, tool_use_id: str, args: dict[str, Any], reason: str, rec: Recorder
+    ) -> dict[str, Any]:
+        article = law.article(str(args.get("ref") or ""))
+        if article is None:
+            rec.step("TOOL_CALL", "법령 조회", f"{reason} → 없는 조항", "FAILED")
+            return tool_error(tool_use_id, "없는 조항입니다. search_law가 돌려준 ref를 쓰세요.")
+        self.seen_law_refs.add(article.ref)
+        rec.step("TOOL_CALL", "법령 조회", f"{reason} → {article.label}")
+        payload = {
+            "ref": article.ref,
+            "label": mask_text(article.label),
+            "title": mask_text(article.title),
+            "text": article.text,
+        }
+        return tool_result(tool_use_id, seal_payload(payload))
 
     def _get_transactions(
         self,

@@ -1,7 +1,8 @@
 """법령 안내(계약 4.2.1). **코드 상수**이고 문구의 정본은 이 파일이다.
 
-`quote`는 `docs/legal/`의 현행 원문 스냅샷(11/22 받음)에서 그대로 발췌한다. 떨어진 두 곳은
-` … `로 잇는다. 테스트가 조각마다 원문에 있는지 확인한다(원칙 3, 지어낸 인용 금지).
+`quote`는 `app/agent/law_data/`의 현행 원문 스냅샷(11/22 받음, 받은 방법은 `docs/legal/`)에서
+그대로 발췌한다. 떨어진 두 곳은 ` … `로 잇는다.
+테스트가 조각마다 원문에 있는지 확인한다(원칙 3, 지어낸 인용 금지).
 
 사건을 보고 판정하지 않는다(원칙 1). 입금 유형은 항목을 고르고 "보통 쓰는 사유" 표시만 바꾼다.
 """
@@ -26,7 +27,7 @@ DECREE_URL = "https://www.law.go.kr/LSW/lsInfoP.do?lsiSeq=290281"
 LAW_EFFECTIVE = date(2026, 10, 2)
 DECREE_EFFECTIVE = date(2026, 10, 1)
 
-# 원문 스냅샷 파일(`docs/legal/`). 테스트가 quote 대조에 쓴다
+# 원문 스냅샷 파일(`app/agent/law_data/`, T23에서 옮김). 테스트가 quote 대조에 쓴다
 SnapshotDoc = Literal["law", "decree", "form"]
 SNAPSHOT_FILES: dict[SnapshotDoc, str] = {
     "law": "law_20261002.txt",
