@@ -105,8 +105,8 @@ T00 규칙
 | [T15](T15-transaction-rows.md) | 거래 행 추출 | 완료 | #17 | #55 |
 | [T16](T16-compare-agent.md) | 대조 에이전트 | 완료 | #18 | #56 |
 | [T17](T17-draft-verify.md) | 초안 작성 + 후검증 | 완료 | #19 | #57 |
-| [T23](T23-law-tool.md) | 법령 조회 도구(v0.8) | PR | #60 | |
-| [T24](T24-agent-review.md) | AI 의견·질문 `agentReview` + 조사 계획(v0.8) | PR | #62 | |
+| [T23](T23-law-tool.md) | 법령 조회 도구(v0.8) | 완료 | #60 | #61 |
+| [T24](T24-agent-review.md) | AI 의견·질문 `agentReview` + 조사 계획(v0.8) | 완료 | #62 | #63 |
 | [T25](T25-answers.md) | 답변 받기 `answers`(v0.8) | 계획 확인 | | |
 
 ### 4단계: 배포·마무리 — 11/22 저녁 ~ 11/23 17:00
