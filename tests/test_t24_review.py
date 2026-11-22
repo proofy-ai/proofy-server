@@ -187,6 +187,22 @@ def test_make_plan_step_and_plan_check(claude_app, monkeypatch):
     assert check["summary"] == "계획한 확인 2개 중 1개를 마쳤습니다. 확인 못 한 것: '법령 근거'"
 
 
+def test_plan_check_counts_verified_law_citation(claude_app, monkeypatch):
+    """#73: 법령만 보는 계획 항목은 확인된 법령 인용이 의견에 있으면 마친 것으로 센다."""
+    opinion = _opinion("물품 대금으로 설명할 수 있어 보입니다.", [("LAW:7", LAW_QUOTE)])
+    run, _, _ = _claude_run(claude_app, monkeypatch, _finding_answer([opinion]))
+    check = next(s for s in run["steps"] if s["title"] == "계획 점검")
+    assert check["summary"] == "계획한 확인 2개를 모두 마쳤습니다."
+
+
+def test_plan_check_ignores_unverified_law_citation(claude_app, monkeypatch):
+    """#73: 원문에 없는 인용은 법령 확인으로 세지 않는다."""
+    opinion = _opinion("물품 대금으로 설명할 수 있어 보입니다.", [("LAW:7", "원문에 없는 문장")])
+    run, _, _ = _claude_run(claude_app, monkeypatch, _finding_answer([opinion]))
+    check = next(s for s in run["steps"] if s["title"] == "계획 점검")
+    assert check["summary"] == "계획한 확인 2개 중 1개를 마쳤습니다. 확인 못 한 것: '법령 근거'"
+
+
 def test_make_plan_not_counted_and_limited(claude_app, monkeypatch):
     calls = [("p1", "make_plan", PLAN), ("p2", "make_plan", PLAN), ("p3", "make_plan", PLAN)]
     calls += [(f"u{i}", "get_transactions", TX_QUERY) for i in range(MAX_TOOL_CALLS)]

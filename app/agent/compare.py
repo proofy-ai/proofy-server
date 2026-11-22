@@ -34,7 +34,7 @@ from app.agent.output import AnalysisOutput, TransactionRow
 from app.agent.runner import RunContext
 from app.agent.scripted import DOC_TYPE_LABELS, plan_summary
 from app.agent.steps import AgentError, Recorder
-from app.agent.verify import CONFLICT_FIELDS, STATUSES, check_output
+from app.agent.verify import CONFLICT_FIELDS, STATUSES, Checked, check_output
 
 logger = logging.getLogger(__name__)
 
@@ -356,8 +356,8 @@ class ClaudeAnalyzer:
         self.seen_transactions: set[str] = set()
         # 이번 실행에서 법령 도구가 실제로 돌려준 조항 ref(T23, 의견·질문 근거 검증 기준)
         self.seen_law_refs: set[str] = set()
-        # 마지막 조사 계획의 항목 수(T24, 계획 대비 점검)와 계획 도구 호출 수
-        self.plan: list[str] = []
+        # 마지막 조사 계획의 항목(주장, 출처 키)(T24, 계획 대비 점검)과 계획 도구 호출 수
+        self.plan: list[tuple[str, frozenset[str]]] = []
         self._plan_calls = 0
         self._tool_calls = 0
 
@@ -442,7 +442,8 @@ class ClaudeAnalyzer:
             if f.status == "CONFLICT":
                 rec.step("CONFLICT", "자료와 어긋나는 내용", f.note)
         if self.plan:
-            rec.step("VERIFY", "계획 점검", _plan_check(self.plan, checked.plan_covered))
+            covered = checked.plan_covered | _law_covered(self.plan, checked)
+            rec.step("VERIFY", "계획 점검", _plan_check([c for c, _ in self.plan], covered))
 
     def draft(self, ctx: RunContext, rec: Recorder, out: AnalysisOutput) -> None:
         """③ 초안과 ④ 후검증(T17, `agent/drafting.py`). 대조와 같은 클라이언트라 비용이 이어진다."""
@@ -534,14 +535,17 @@ class ClaudeAnalyzer:
         if self._plan_calls > MAX_PLAN_CALLS:
             return tool_error(tool_use_id, "계획은 한 번만 고칠 수 있습니다. 조사를 이어 가세요.")
         items: list[tuple[str, str]] = []
+        keys: list[frozenset[str]] = []
         for item in (args.get("items") or [])[:MAX_PLAN_ITEMS]:
             if not isinstance(item, dict):
                 continue
             claim = str(item.get("claim") or "").strip()[:PLAN_CLAIM_CHARS]
             if not claim:
                 continue
-            kinds = [PLAN_SOURCES[k] for k in item.get("sources") or [] if k in PLAN_SOURCES]
+            sources = [k for k in item.get("sources") or [] if k in PLAN_SOURCES]
+            kinds = [PLAN_SOURCES[k] for k in sources]
             items.append((claim, "·".join(dict.fromkeys(kinds)) or "자료"))
+            keys.append(frozenset(sources))
         if not items:
             return tool_error(tool_use_id, "확인할 주장을 하나 이상 적으세요.")
         revision = str(args.get("revision") or "").strip()[:REASON_CHARS] or None
@@ -549,7 +553,7 @@ class ClaudeAnalyzer:
             revision = None  # 판정처럼 읽히는 이유는 화면에 보이지 않는다(계약 4.10)
         title = "조사 계획" if self._plan_calls == 1 else "조사 계획 수정"
         rec.step("TOOL_CALL", title, plan_summary(tuple(items), revision))
-        self.plan = [claim for claim, _ in items]
+        self.plan = [(claim, k) for (claim, _), k in zip(items, keys, strict=True)]
         return tool_result(tool_use_id, seal_payload({"accepted": True, "itemCount": len(items)}))
 
     def _search_law(
@@ -636,6 +640,22 @@ class ClaudeAnalyzer:
         label = DOC_TYPE_LABELS.get(ref.doc_type, "서류")
         rec.step("TOOL_CALL", f"{label} 글 조회", f"{reason} → {len(regions)}줄")
         return tool_result(tool_use_id, seal_payload({"regions": kept, "notice": _notice(notice)}))
+
+
+# 법령으로만 확인하는 계획 항목의 출처(사연은 곁들여도 된다)
+_LAW_ONLY = frozenset({"LAW", "NARRATIVE"})
+
+
+def _law_covered(plan: list[tuple[str, frozenset[str]]], checked: Checked) -> set[int]:
+    """법령만 보는 계획 항목은 확인된(verified) 법령 인용이 의견·질문에 있으면 마친 것으로(#73).
+
+    법령 확인은 대조 항목(planItem)이 아니라 의견·질문의 lawRefs로 나온다.
+    거래내역·서류가 섞인 항목은 대조 항목 번호로만 센다(법령만 읽고 거래를 안 본 경우).
+    """
+    cited = any(r.verified for x in (*checked.opinions, *checked.questions) for r in x.law_refs)
+    if not cited:
+        return set()
+    return {i for i, (_, k) in enumerate(plan) if "LAW" in k and k <= _LAW_ONLY}
 
 
 def _plan_check(plan: list[str], covered: set[int]) -> str:
