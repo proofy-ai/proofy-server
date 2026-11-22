@@ -91,7 +91,7 @@ T00 규칙
 | [T07](T07-analysis-runs.md) | 분석 실행·진행 | 완료 | #9 | #39 |
 | [T08](T08-scripted-result.md) | 가짜 분석기 + 결과 API | 완료 | #10 | #42 |
 | [T09](T09-draft-api.md) | 초안 API | 완료 | #11 | #49 |
-| [T10](T10-safety-referral.md) | 상담 안내(코드 목록 + AI 문맥 확인, v0.8) + 판정 필드 부재 | 대기 | #12 | |
+| [T10](T10-safety-referral.md) | 상담 안내(코드 목록 + AI 문맥 확인, v0.8) + 판정 필드 부재 | 계획 확인 | #12 | |
 | [T11](T11-limits-cleanup.md) | 운영 보호. **a 대체 결과 / b 한도·자동 삭제로 나눠 진행**(11/22) | 대기 | #13 | |
 
 ### 3단계: 실제 AI — T12~T16은 11/22 오전~낮, T17은 11/22 오후
@@ -105,9 +105,9 @@ T00 규칙
 | [T15](T15-transaction-rows.md) | 거래 행 추출 | 완료 | #17 | #55 |
 | [T16](T16-compare-agent.md) | 대조 에이전트 | 완료 | #18 | #56 |
 | [T17](T17-draft-verify.md) | 초안 작성 + 후검증 | 완료 | #19 | #57 |
-| [T23](T23-law-tool.md) | 법령 조회 도구(v0.8) | 대기 | | |
-| [T24](T24-agent-review.md) | AI 의견·질문 `agentReview`(v0.8) | 대기 | | |
-| [T25](T25-answers.md) | 답변 받기 `answers`(v0.8) | 대기 | | |
+| [T23](T23-law-tool.md) | 법령 조회 도구(v0.8) | 계획 확인 | | |
+| [T24](T24-agent-review.md) | AI 의견·질문 `agentReview`(v0.8) | 계획 확인 | | |
+| [T25](T25-answers.md) | 답변 받기 `answers`(v0.8) | 계획 확인 | | |
 
 ### 4단계: 배포·마무리 — 11/22 저녁 ~ 11/23 17:00
 
@@ -142,6 +142,18 @@ T00 규칙
 | T17-a | 인용 검증: 원문에 없는 인용을 근거로 단 항목에 연결된 초안 문장은 `needsCheck`·`QUOTE_NOT_FOUND` | T17 |
 | T17-b | 초안 근거 교차 차단: 없는 항목 번호를 단 문장은 그 연결이 빠지고 `NO_SOURCE` | T17 |
 | T17-c | 1회 고쳐 쓰기: 근거에 없는 금액·판정 표현 문장을 고친 문장이 통과하면 고친 문장, 또 걸리면 원래 문장 + `NUMBER_MISMATCH`·`JUDGMENT_EXPRESSION` | T17 |
+| T24-a | `agentReview` 응답 모양(가짜 분석 GOODS·UNEXPECTED): `notice`, 의견(`lawRefs` `source`·`label`·`quote`·`verified`), 질문(`why`), `answered: []`, `findingIds`가 같은 결과의 `findings` ID | T24 |
+| T24-b | 의견 검증: 조회하지 않은 조항·원문에 없는 인용 → `verified: false`·`needsCheck: true`(지우지 않음), 없는 항목 번호는 빠짐 | T24 |
+| T24-c | 의견 1회 고쳐 쓰기: 결과 예측 의견이 고친 문장으로 통과하면 고친 문장, 또 걸리면 원래 문장 + `needsCheck` | T24 |
+| T16-a 수정 | 판정 필드 부재: 대조 출력 스키마 칸 목록에 `opinions`·`questions`·`consult`와 그 안의 칸 추가 | T24·T10 |
+| T25-a | 답 검증: 최근 성공 실행에 없는 `questionId` → `400 VALIDATION_ERROR`·`details.fields.answers`, 빈 답·501자 → 400, 400이면 사연·답 모두 저장 안 됨 | T25 |
+| T25-b | 답 반영: `inputVersion` +1, 다시 분석 결과 `answered`(답한 순서, 마지막 답), 답한 질문은 `questions`에 다시 안 나옴 | T25 |
+| T25-c | 답이 AI에 가려서 감: 첫 메시지에 질문·답, 답 속 이름 가림, 답을 인용한 `NARRATIVE` 근거 `verified: true` | T25 |
+| T10-a | 상담 안내 결과 모양: `SUCCEEDED`, step `SAFETY`, `referral`(`LEGAL_CONSULT`, `matchedPhrases`, 132·1332), `findings: []`, `draft: null`, `summary` 0, `GET /draft` 404, 질문 1개 이상 | T10 |
+| T10-b | 다시 분석해 상담 안내로 끝나면 이전 초안 행 삭제, `GET /draft` 404 | T10 |
+| T10-c | 걸리지 않음: 두 샘플 사연, 부정문("빌려준 적이 없습니다") → `referral: null` | T10 |
+| T10-d | AI 문맥 확인: 원문에 없는 인용만 → 코드가 찾은 표현으로 안내, 코드도 없으면 안내 없음 + `VERIFY`, AI가 안 권하면 안내 없음 + `SAFETY` | T10 |
+| T10-e | 판정 필드 부재: GOODS·UNEXPECTED·상담 안내 결과와 초안 JSON 전체 키(`agentReview` 포함)에 판정성 단어 없음 | T10 |
 
 2단계 이후 작업(결과 응답 모양, 판정 필드 부재, 상담 안내, 근거 교차 차단)의 계약 테스트는 그 작업의 구현 계획에서 목록을 제안하고 승인받는다.
 

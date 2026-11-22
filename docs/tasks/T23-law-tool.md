@@ -20,8 +20,32 @@
 
 ## 구현 계획
 
-(T23·T24·T25·T10을 한꺼번에 써서 확인받는다)
+(11/22 T23·T24·T25·T10을 한꺼번에 작성)
+
+### 바꿀 파일
+| 파일 | 내용 |
+|---|---|
+| `app/agent/law_data/*.txt`(옮김) | `docs/legal/`의 법·시행령·별지 제4호 글자 파일 3개를 `git mv`(Docker 이미지가 `app/`만 담음). PDF와 README는 `docs/legal/`에 남기고 README에 새 위치를 적는다 |
+| `app/services/legal.py`, `tests/test_t21_legal.py` | 원문 경로만 새 위치로 |
+| `app/agent/law.py`(새) | 시작할 때 한 번 원문을 **조 단위**로 나눔(`제N조(의M)(제목)` 줄부터 다음 조 앞까지, 부칙은 뺌). 별지 제4호는 통째로 한 조각 `FORM4`. `ref` 모양 `LAW:7`, `DECREE:7`, `FORM4`. 함수: `search(query)` 낱말이 많이 맞는 조항 5개 `{ref, label, snippet}` / `article(ref)` 조항 원문 / `check_quote(ref, quote)` → 공백 무시하고 원문에 있으면 `(True, 항·호까지 붙인 label)`, 없으면 `(False, 조 단위 label)` |
+| `app/agent/compare.py` | 도구 `search_law(reason, query)`, `get_law_article(reason, ref)` 추가. step `TOOL_CALL` "법령 조회"(`{reason} → 조항 N개` / `→ 법 제7조`). 이번 실행에서 돌려준 `ref`를 `seen_law_refs`에 모음. 도구 상한 8 → 12, 요청 상한 10 → 14 |
+
+- label 예: 인용이 법 제7조 ①항 2호 줄에 있으면 "법 제7조 제1항 제2호", 시행령이면 "시행령 제7조", 별지는 "별지 제4호 이의제기신청서"
+- 법령은 공개 글이라 가리지 않지만, AI에 보낼 때는 지금처럼 `seal_payload`를 거친다(코드가 만든 글로 표시)
+
+### 테스트(단위, 승인 불필요)
+- 조 나누기: 법 제7조·시행령 제7조가 있고 부칙의 `제1조(시행일)`이 본문 제1조를 덮지 않음
+- `search("재화 용역 대가")` 첫 결과가 `LAW:7`
+- `check_quote`: 띄어쓰기를 바꾼 인용도 찾고 label이 "법 제7조 제1항 제2호", 없는 글은 `False`
+- 도구 호출이 step `TOOL_CALL` "법령 조회"를 남기고 `seen_law_refs`에 쌓임(가짜 SDK)
+
+### 정할 것(추천)
+1. 원문 위치: **`app/agent/law_data/`로 옮김**(추천). 복사하면 두 곳이 어긋날 수 있다
+2. 나누는 단위: **조 단위로 돌려주고, label의 항·호는 인용 위치로 서버가 붙임**(추천). 항·호 단위로 나누면 조각이 300개 넘어 검색이 흐려진다
+3. 도구 상한 8 → **12**(추천). 법령 조회가 1~3회 더 든다. 실측(T19)에서 시간이 길면 줄인다
 
 ## 결정
+
+- 11/22 사용자 "추천안대로": 정할 것 1~3 추천안
 
 ## 결과

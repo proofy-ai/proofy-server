@@ -22,9 +22,38 @@
 
 ## 구현 계획
 
-(작업 시작 때 작성하고 확인받는다)
+(11/22 T23·T24·T25·T10을 한꺼번에 작성. 표현 목록·부정문 규칙은 stash 초안을 그대로 씀)
+
+### 바꿀 파일
+| 파일 | 내용 |
+|---|---|
+| `app/services/safety.py`(새) | 표현 목록 4묶음(통장·계좌·체크카드 대여·양도 / 비밀번호·OTP 전달 / 환전·구매대행·송금 알바 / 현금 인출 후 전달). 걸린 곳 뒤 15자 안에 `적이 없`·`지 않`·`않았`·`거절`·`거부`가 있으면 뺌. `find_phrases(texts) -> list[str]`(걸린 글자, 나온 순서, 중복 없음). 안내 문구·연락처(132, 1332) 상수 |
+| `app/services/analysis.py` | 시작할 때 사연 + 지금까지의 답을 검사해 `RunContext.safety_hits`로 넘김. 상담 안내로 끝난 실행은 사용 기록 `referral=true` |
+| `app/agent/output.py`, `runner.py` | `out.referral = Referral(phrases)`. 상담 안내면 runner가 ③ 초안 단계를 건너뜀(단계 표시는 그대로 넘어감) |
+| `app/agent/scripted.py` | 걸린 표현이 있으면 대조·초안 대신 step `SAFETY` + `referral` + 고정 질문 1개("어떤 상황에서 통장(계좌)을 건네거나 돈을 옮기게 됐는지 알려 주세요") |
+| `app/agent/compare.py` | 첫 메시지에 `checkPhrases`(걸린 표현을 가린 글). 출력 스키마 `consult {recommend, quotes[], reason}`. 프롬프트: 문맥을 읽고 정함, 부정문이면 권하지 않음, 권하면 사연·답 원문 인용과 상황을 묻는 질문 |
+| `app/agent/verify.py` | `consult` 확인: 인용이 가린 사연·답에 있으면 그 인용이 `matchedPhrases`. 없으면 코드 목록이 찾은 표현, 그것도 없으면 상담 안내 안 하고 step `VERIFY`. AI가 권하지 않으면 step `SAFETY`("'…'는 문맥상 상담 안내 안 함", 이유에 판정 표현이 있으면 이유 빼고) |
+| `app/services/results.py` | 상담 안내면 `referral_json` 저장, 대조·AI 권장 항목·의견은 저장 안 함, **사건의 초안 행 삭제**. 조회: `referral {code, matchedPhrases, message, contacts}`, `findings: []`, `draft: null`, `summary` 모두 0, 체크리스트는 평소대로, `agentReview`는 질문만 |
+| `app/schemas/result.py` | `referral: dict` → `Referral` 모델 |
+
+### 계약 테스트(승인 필요)
+| # | 내용 |
+|---|---|
+| T10-a | 상담 안내(가짜 분석): "통장을 빌려주고" 사연 → `SUCCEEDED`, step `SAFETY`, `referral` 모양(`LEGAL_CONSULT`, `matchedPhrases`, 132·1332), `findings: []`, `draft: null`, `summary` 모두 0, `GET /draft` 404, `agentReview.questions` 1개 이상 |
+| T10-b | 다시 분석해 상담 안내로 끝나면 이전 초안 행이 지워지고 `GET /draft` 404 |
+| T10-c | 걸리지 않음: 두 샘플 사연, "통장을 빌려준 적이 없습니다" → `referral: null` |
+| T10-d | AI 문맥 확인(가짜 SDK): 원문에 없는 인용만 내면 코드가 찾은 표현으로 안내, 코드도 못 찾았으면 안내 없음 + step `VERIFY`, AI가 권하지 않으면 코드가 찾았어도 안내 없음 + step `SAFETY` |
+| T10-e | 판정 필드 부재: GOODS·UNEXPECTED·상담 안내 결과와 초안 JSON 전체 키(중첩, `agentReview` 포함)에 판정성 단어(`release`·`accept`·`approv`·`verdict`·`judg`·`decision`·`likelihood`·`probab`·`chance`·`score`·`outcome`·`eligib`·`predict`)가 없음 |
+
+### 정할 것(추천)
+1. 표현 목록 검사 위치: **분석 시작 때 서비스 계층에서 원문 사연·답으로**(추천, CLAUDE.md "services/ 상담 안내 검사"). AI에 넘길 때는 runner가 가린다
+2. 상담 안내 결과의 의견: **비움, 질문만**(추천). 상담이 먼저인 사안에 법령 의견을 내지 않는다
+3. 체크리스트의 AI 권장 항목도 저장 안 함(추천, 대조를 안 쓰므로)
+4. step `SAFETY`는 표현이 걸렸을 때만(추천). 안 걸린 실행의 step 목록은 지금과 같다
 
 ## 결정
+
+- 11/22 사용자 "추천안대로": 정할 것 1~4 추천안, 계약 테스트 T10-a~e 승인
 
 ## 결과
 
