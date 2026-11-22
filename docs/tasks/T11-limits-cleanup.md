@@ -4,6 +4,8 @@
 
 ## 범위
 
+> 11/22: **T11-a 대체 결과**(아래 셋째 항목, `agentReview` 포함)를 먼저 하고, **T11-b 한도·자동 삭제**(나머지)는 T10 뒤에 한다(`README.md` 11/22 낮 변경).
+
 - IP당 사건 생성 시간당 20회, 사건당 분석 시간당 5회 → 429 `RATE_LIMITED`
 - 서비스 전체 분석 하루 300회 → 429 `DAILY_LIMIT`
 - 샘플 사건 대체 결과: AI 실패·하루 한도 초과 때 미리 만든 결과로 `SUCCEEDED`, `precomputed: true`, step `FALLBACK`(계약 4.10)

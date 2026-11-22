@@ -4,10 +4,13 @@
 
 ## 범위
 
-- 사연 표현 목록 검사(⓪ SAFETY, 계약 4.9): 걸리면 AI 호출 없이 끝, `result.referral`, `draft: null`, 초안 조회 404, step `SAFETY`
-- 판정 필드 부재 테스트: 결과·초안 JSON에 판정성 키가 없음
-- 판정성 표현 검사 함수(`JUDGMENT_EXPRESSION`)
-- 다시 분석해 상담 안내로 끝나면 이전 초안 행 삭제 → `GET /draft` 404(계약 v0.6 4.11). 계약 테스트 후보로 제안
+> 11/22 계약 v0.8로 바뀜(`docs/agent-design.md` 2.1). 키워드만으로 끝내던 첫 계획 초안은 git stash "T10 계획 초안(키워드 방식)"에 있다.
+
+- ⓪ 표현 목록(부정문 제외)으로 가린 사연·답에서 찾기 → 실제 분석은 ② 에이전트에 넘겨 문맥 확인, 가짜·대체 결과는 목록만으로 결정
+- 에이전트의 상담 권유(`consult`): 사연·답 원문 인용을 서버가 확인 → `result.referral`(`matchedPhrases` = 확인된 인용), `agentReview` 질문, `draft: null`, 초안 조회 404, step `SAFETY`
+- 다시 분석해 상담 안내로 끝나면 이전 초안 행 삭제 → `GET /draft` 404(계약 4.11)
+- 판정 필드 부재 테스트: 결과·초안 JSON에 판정성 키가 없음(`agentReview` 포함)
+- 판정성 표현 검사 함수(`JUDGMENT_EXPRESSION`)는 T17에서 만듦
 
 ## 제외
 

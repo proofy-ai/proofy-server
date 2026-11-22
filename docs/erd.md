@@ -1,10 +1,11 @@
-# Proofy ERD v1.3 (P0)
+# Proofy ERD v1.4 (P0)
 
 - 작성 2026-11-21 · **데이터 모델 정본.** 구현(`app/models/`)과 다르면 이 문서를 먼저 고치고 구현을 맞춘다
 - 근거: 초안 `etc/proofy_erd_v0.1.md`(레포 밖), 검토 결정 `docs/erd-review.md`, API 계약 `docs/contract.md` v0.6, AI 흐름 `docs/agent-design.md`
 - v1.1(2026-11-21): FE 수정 요청 반영. `usage_events` 추가(한도·비용을 사건과 분리), 증빙 파일을 DB에 저장(`evidence_files`), 인용 검증 기준을 마스킹한 글로 명시, `input_version`은 값이 실제로 바뀔 때만, 상담 안내 실행은 이전 초안 삭제
 - v1.2(2026-11-22, T08): `finding_sources.seq`(근거 화면 순서) 추가, 서류를 지우면 그 서류에서 나온 거래 행·근거도 함께 지움(ON DELETE CASCADE, 결과는 `isStale`), AI 권장 항목 상한 3개와 충족 계산 규칙
 - v1.3(2026-11-22, T09): `drafts.edited_at`(사용자가 저장한 적 있음 → 다시 분석 시 `DRAFT_HAS_EDITS`)
+- v1.4(2026-11-22, 계약 v0.8): `analysis_opinions`(AI 조건부 의견), `analysis_questions`(AI 질문과 사용자 답). v0.1의 P1 질문 테이블을 P0로 올림. **새 표만 추가라 배포 DB 초기화가 필요 없다**
 - DB: 로컬 SQLite, 배포 Postgres. UUID는 문자열(36자), JSON은 SQLAlchemy `JSON` 타입(둘 다 동작), 시각은 UTC로 저장
 - 테이블 생성: 서버 시작 시 생성. Alembic은 미룸(11/22, T22). 표가 바뀌면 배포 DB 표를 지우고 다시 만든다(합성 데이터)
 
@@ -13,7 +14,7 @@
 | 원칙 | 데이터에서 어떻게 지키나 |
 |---|---|
 | 진술과 증거를 섞지 않는다 | 사용자가 말한 입금액은 `case_inflows.reported_amount_krw`, 서류에서 뽑은 거래는 `transactions.amount_krw`. 두 값을 합치거나 덮어쓰지 않는다 |
-| AI는 판정하지 않는다 | 해제·수용 가능성, 판정 갈래, 제출·심사 상태 컬럼이 없다. `MATCH`는 "일치하는 자료가 있다"는 뜻일 뿐이다 |
+| AI는 조건부 의견까지만 낸다 | 해제·수용 가능성, 판정 갈래, 제출·심사 상태 컬럼이 없다. `MATCH`는 "일치하는 자료가 있다"는 뜻일 뿐이다. AI 의견은 문장(`analysis_opinions.text`)으로만 저장하고 초안(`drafts`)과 섞지 않는다 |
 | 숫자·날짜는 코드가 만든다 | D-day, 체크리스트 충족 여부, `unconfirmedCount`, `isStale`은 저장하지 않고 읽을 때 계산한다 |
 | 근거는 같은 사건 안에서만 | `finding_sources`가 가리키는 증빙·거래는 같은 사건 소속이어야 한다. FK만으로는 못 막으므로 서버 검증기가 확인한다 |
 | 개인정보 최소화 | 신분증, 신청인 인적사항(별지 제4호 이름·주소·계좌)은 저장하지 않는다. AI에는 마스킹한 글(`masked_text`, 마스킹한 사연)만 보낸다. 사건은 24시간 뒤 삭제. 사용량 로그(`usage_events`)에는 개인정보를 두지 않는다 |
@@ -34,6 +35,9 @@ erDiagram
     analysis_runs ||--o{ checklist_items : "AI 권장 항목"
     analysis_runs ||--o{ drafts : "초안의 기반"
     claim_findings ||--o{ finding_sources : "근거"
+    analysis_runs ||--o{ analysis_opinions : "AI 의견(v0.8)"
+    analysis_runs ||--o{ analysis_questions : "AI 질문(v0.8)"
+    cases ||--o{ analysis_questions : "질문과 답"
     finding_sources }o--o| evidence : "EVIDENCE 근거"
     finding_sources }o--o| transactions : "TRANSACTION 근거"
 
@@ -158,6 +162,29 @@ erDiagram
         json warnings_json
         datetime created_at
         datetime updated_at
+    }
+    analysis_opinions {
+        string id PK
+        string analysis_run_id FK
+        int seq
+        text text
+        json finding_ids_json
+        json law_refs_json
+        bool needs_check
+        string check_reason
+    }
+    analysis_questions {
+        string id PK
+        string case_id FK
+        string analysis_run_id FK
+        int seq
+        text text
+        text why
+        json finding_ids_json
+        json law_refs_json
+        text answer
+        datetime answered_at
+        datetime created_at
     }
 ```
 
@@ -384,6 +411,37 @@ AI 권장 항목은 한 실행당 최대 3개다. 충족 여부는 `accepted_doc
 - 사건당 분석: 같은 `case_id`의 `ANALYSIS_RUN`이 최근 1시간에 `RATE_LIMIT_RUNS_PER_CASE_HOUR`(기본 5)개 이상이면 429 `RATE_LIMITED`
 - 하루 분석: 오늘(한국 날짜 0시부터) `ai_called = true`인 `ANALYSIS_RUN`이 `DAILY_ANALYSIS_LIMIT`(기본 300)개 이상이면 429 `DAILY_LIMIT`. 이 값과 사용량은 `GET /health`의 `dailyUsage`로 보인다
 
+### 3.11 `analysis_opinions` — AI 조건부 의견 (v0.8, T24)
+
+| 컬럼 | 타입 | 제약 | 의미 |
+|---|---|---|---|
+| `id` | UUID | PK | `opinionId` |
+| `analysis_run_id` | UUID | FK | 의견을 낸 실행. 결과는 가장 최근 성공 실행 것만 보여 준다 |
+| `seq` | INTEGER | 필수 | 화면 순서. 한 실행 최대 3개 |
+| `text` | TEXT | 필수 | 의견 문장. 초안에는 넣지 않는다 |
+| `finding_ids_json` | JSON | 필수, 기본 `[]` | 같은 실행의 `claim_findings.id`만(서버가 번호를 ID로 바꾸고 없는 번호는 버림) |
+| `law_refs_json` | JSON | 필수, 기본 `[]` | `[{ref, source, label, quote, verified}]`. `verified`는 이번 실행에서 읽은 조항 원문에 인용이 있나(서버) |
+| `needs_check` | BOOLEAN | 필수 | 서버 검사에서 걸림 |
+| `check_reason` | VARCHAR(32) | NULL | 서버 안에서만 쓰는 사유: `LAW_QUOTE_NOT_FOUND` · `JUDGMENT_EXPRESSION` · `NUMBER_MISMATCH` |
+
+### 3.12 `analysis_questions` — AI 질문과 사용자 답 (v0.8, T24·T25)
+
+| 컬럼 | 타입 | 제약 | 의미 |
+|---|---|---|---|
+| `id` | UUID | PK | `questionId` |
+| `case_id` | UUID | FK | 사건. `answered` 목록을 사건 단위로 모은다 |
+| `analysis_run_id` | UUID | FK | 질문을 낸 실행. 답은 **가장 최근 성공 실행의 질문**에만 받는다(아니면 400) |
+| `seq` | INTEGER | 필수 | 화면 순서. 한 실행 최대 3개 |
+| `text` · `why` | TEXT | 필수 | 질문과 묻는 이유 |
+| `finding_ids_json` · `law_refs_json` | JSON | 필수, 기본 `[]` | 3.11과 같은 규칙 |
+| `answer` | TEXT | NULL | 사용자 답(1~500자, 원문). AI에는 사건 이름 목록으로 가린 뒤에만 보낸다. 같은 질문에 다시 답하면 덮어쓴다 |
+| `answered_at` | TIMESTAMP(UTC) | NULL | 답한 시각. `answered` 목록은 `answer`가 있는 행을 이 순서로 |
+| `created_at` | TIMESTAMP(UTC) | 필수 | |
+
+- 다시 분석해도 이전 실행의 질문 행은 지우지 않는다(답한 기록을 `answered`로 보여 주고 다음 분석에 넘기려고). 답하지 않은 옛 질문은 화면에 나오지 않는다.
+- 답이 들어오면 `cases.input_version` +1(4절).
+- 실제 분석에서 AI에 보낸 질문·답 묶음(가림)은 사연과 함께 `analysis_runs.masked_narrative`에 붙여 저장한다(인용 검증 기준).
+
 ## 4. 상태와 버전
 
 ```mermaid
@@ -400,9 +458,10 @@ stateDiagram-v2
 |---|---|
 | 사연·입금 정보·날짜 수정(`PATCH`, 분석 시작 때 보낸 `narrative` 포함) | 저장된 값과 **실제로 다를 때만** `cases.input_version` +1 → 기존 결과는 `isStale`. 같은 값이면 그대로(샘플 사건이 "샘플 그대로" 조건을 잃지 않게) |
 | 증빙 추가·삭제 | `cases.input_version` +1 |
+| 질문에 답함(분석 시작의 `answers`, v0.8) | `analysis_questions.answer`·`answered_at` 저장, `cases.input_version` +1 |
 | 사건 생성 | `usage_events`(`CASE_CREATE`) 새 행 |
 | 분석 시작 | `analysis_runs` 새 행, `version` +1, `based_on_input_version` 기록. `usage_events`(`ANALYSIS_RUN`) 새 행 |
-| 분석 성공 | 그 실행의 `transactions`, `claim_findings`, `finding_sources`, AI 권장 `checklist_items`, `drafts` 기록. 상담 안내로 끝나면 `drafts` 행을 지운다 |
+| 분석 성공 | 그 실행의 `transactions`, `claim_findings`, `finding_sources`, AI 권장 `checklist_items`, `analysis_opinions`, `analysis_questions`, `drafts` 기록. 상담 안내로 끝나면 `drafts` 행을 지운다(의견·질문은 남김) |
 | 다시 분석 | 이전 실행은 지우지 않고 새 실행을 만든다. **결과·거래·AI 권장 체크리스트 항목은 가장 최근 성공 실행 것만 보여 준다**(이전 실행의 행은 조회에서 거른다). 사용자가 고친 초안이 있으면 확인 후(409 `DRAFT_HAS_EDITS`) 덮어쓴다 |
 | 초안 저장 | `drafts.version` +1 |
 
@@ -431,7 +490,7 @@ stateDiagram-v2
 
 ## 6. P1 (이번에 만들지 않음)
 
-- `analysis_questions`, `messages`: AI 추가 질문과 답변 후 재분석
+- `messages`: 실시간 대화. P0는 질문·답 후 다시 분석(`analysis_questions`, v1.4에서 P0로 올림)
 - `draft_revisions`: 초안 수정 이력
 - 초안 승인(`APPROVED`·`STALE`)과 서버 PDF 생성. P0는 복사 + 브라우저 인쇄
 - `public_notice_source`: 공고일 출처(사용자 입력·통지서·은행 확인)
@@ -449,3 +508,5 @@ stateDiagram-v2
 | T09 초안 API | `drafts` |
 | T11 운영 보호 | `usage_events` |
 | T13·T14·T15 | `evidence` 추출 컬럼 채움, `transactions` 실제 추출 |
+| T24 AI 의견·질문 | `analysis_opinions`, `analysis_questions` |
+| T25 답변 받기 | `analysis_questions.answer`·`answered_at` 채움 |
