@@ -30,7 +30,7 @@ from app.agent.steps import Recorder
 
 logger = logging.getLogger(__name__)
 
-PROMPT_VERSION = "t25-v1"
+PROMPT_VERSION = "t25-v2"
 SECTIONS = ("DEPOSIT_REASON", "NO_INVOLVEMENT", "VICTIM_CONTEXT")
 SECTION_WORDS = {
     "DEPOSIT_REASON": "입금 경위",
@@ -143,7 +143,11 @@ answers의 답도 사연처럼 본인이 말한 사실이므로 본인 진술로
 - 금액·날짜는 연결한 항목의 evidence에 있는 값만 그대로 씁니다.
   합계·차이·기간을 계산하지 않습니다
 - status가 CONFLICT인 항목(사연과 자료가 다름)은 어느 쪽이 맞다고 단정하지 않고
-  사연의 내용대로 쓰되 그 번호를 연결합니다. 화면에서 사용자가 자료와 비교해 확인합니다
+  사연의 내용대로 쓰되 그 번호를 연결합니다. 단, answers의 답이 그 내용을 바로잡거나
+  보충했으면 답의 내용대로 씁니다. 화면에서 사용자가 자료와 비교해 확인합니다
+- answers의 답이 사연의 어떤 내용을 바로잡거나 보충하면, 그 내용은 답을 기준으로
+  한 문장에 한 번만 씁니다. 사연의 바뀌기 전 내용(예: 사연의 수량·금액)을 다른 문장에
+  따로 다시 쓰지 않습니다
 - STATEMENT_ONLY 항목은 본인 진술로 쓰고 번호를 연결합니다
 - 해제·수용 가능성, 유리·불리, "확실히", "틀림없이" 같은 판정·예측 표현을
   쓰지 않습니다. 사실만 씁니다
