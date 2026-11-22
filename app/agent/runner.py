@@ -14,6 +14,7 @@
 
 import time
 from dataclasses import dataclass, replace
+from datetime import date
 from typing import Any, Protocol
 
 from app.agent.extract import Extraction, extract_document
@@ -26,7 +27,7 @@ from app.agent.masking import (
     mask_text,
 )
 from app.agent.output import AnalysisOutput
-from app.agent.steps import STAGES, AgentTimeout, Recorder
+from app.agent.steps import STAGES, AgentError, AgentTimeout, Recorder
 from app.agent.transactions import parse_rows
 
 
@@ -57,6 +58,14 @@ class RunContext:
     ocr_lang: str = "kor+eng"
     tesseract_cmd: str | None = None
     pdftoppm_cmd: str | None = None
+    # 사용자가 말한 입금 날짜(없을 수 있음)
+    reported_occurred_at: date | None = None
+    # 이 유형의 고정 체크리스트 라벨. AI가 같은 서류를 다시 권하지 않게 보여 준다(T08·T16)
+    checklist_labels: tuple[str, ...] = ()
+    # 대조 에이전트 설정(T16). `agent == "claude"`일 때만 쓴다
+    anthropic_api_key: str | None = None
+    anthropic_model: str = "claude-opus-5-5"
+    anthropic_effort: str = "low"
 
     def check_deadline(self) -> None:
         if time.monotonic() > self.deadline:
@@ -88,8 +97,12 @@ class Analyzer(Protocol):
 
 
 def select_analyzer(agent: str) -> Analyzer:
-    """`AGENT_LLM` 값으로 분석기를 고른다. 실행마다 새로 만든다. claude는 T16에서 붙인다."""
-    # scripted가 이 모듈의 RunContext를 쓰므로 여기서 불러온다
+    """`AGENT_LLM` 값으로 분석기를 고른다. 실행마다 새로 만든다."""
+    # 두 분석기가 이 모듈의 RunContext를 쓰므로 여기서 불러온다
+    if agent == "claude":
+        from app.agent.compare import ClaudeAnalyzer
+
+        return ClaudeAnalyzer()
     from app.agent.scripted import ScriptedAnalyzer
 
     return ScriptedAnalyzer()
@@ -169,9 +182,7 @@ def _extract_summary(result: Extraction) -> str:
     return summary
 
 
-def execute(
-    ctx: RunContext, rec: Recorder, store: EvidenceStore | None = None
-) -> AnalysisOutput:
+def execute(ctx: RunContext, rec: Recorder, store: EvidenceStore | None = None) -> AnalysisOutput:
     analyzer = select_analyzer(ctx.agent)
     out = AnalysisOutput()
     steps = {
@@ -179,14 +190,19 @@ def execute(
         "COMPARING": analyzer.compare,
         "DRAFTING": analyzer.draft,
     }
-    for stage, _label in STAGES:
+    try:
+        for stage, _label in STAGES:
+            ctx.check_deadline()
+            rec.stage(stage)
+            if stage == "EXTRACTING":
+                if ctx.agent == "claude" and store is not None:
+                    _extract_evidence(ctx, rec, store, out)
+                _mask_inputs(ctx, out, store)
+                _extract_transactions(ctx, rec, out)
+            steps[stage](ctx, rec, out)
         ctx.check_deadline()
-        rec.stage(stage)
-        if stage == "EXTRACTING":
-            if ctx.agent == "claude" and store is not None:
-                _extract_evidence(ctx, rec, store, out)
-            _mask_inputs(ctx, out, store)
-            _extract_transactions(ctx, rec, out)
-        steps[stage](ctx, rec, out)
-    ctx.check_deadline()
+    except AgentError as exc:
+        # 실패한 실행도 외부 AI 비용(`out.model`·토큰)을 남길 수 있게 출력을 붙인다
+        exc.output = out  # type: ignore[attr-defined]
+        raise
     return out

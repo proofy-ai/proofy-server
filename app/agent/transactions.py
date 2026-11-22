@@ -9,7 +9,7 @@ from collections.abc import Iterable
 from datetime import date
 from typing import Any
 
-from app.agent.masking import TX_ROW
+from app.agent.masking import TX_ROW, MaskedText, masked_part
 from app.agent.output import TransactionRow
 
 _DIRECTIONS = {"입금": "IN", "출금": "OUT"}
@@ -50,8 +50,12 @@ def parse_rows(
         if parsed is None:
             continue
         day, direction, amount, _ = parsed
-        masked = _parse(region.get("maskedText", ""))
-        counterparty = masked[3] if masked is not None else None
+        masked_line = region.get("maskedText", "")
+        masked = _parse(masked_line)
+        counterparty = masked[3][:100] if masked is not None and masked[3] else None
+        if counterparty and isinstance(masked_line, MaskedText):
+            # 외부 AI(T16)에 보낼 수 있게 가린 글 타입을 이어 간다
+            counterparty = masked_part(masked_line, counterparty)
         row = TransactionRow(
             key=f"t{start_key + len(rows)}",
             evidence_id=evidence_id,
@@ -59,7 +63,7 @@ def parse_rows(
             direction=direction,  # type: ignore[arg-type]
             amount_krw=amount,
             occurred_at=day,
-            counterparty_masked=counterparty[:100] if counterparty else None,
+            counterparty_masked=counterparty,
             raw_text=text.strip(),
         )
         if row_matches_source(row, text):

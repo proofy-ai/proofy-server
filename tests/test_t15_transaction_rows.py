@@ -3,6 +3,7 @@
 import time
 from datetime import date
 
+import fake_claude
 import pytest
 
 from app.agent.extract.pdf_text import extract_pdf_text
@@ -107,6 +108,7 @@ def test_raw_text_and_masked_counterparty():
 
 
 # 5: AGENT_LLM=claude 분석에서 실제로 뽑은 행이 저장되고 탭 A 근거가 된다
+# (② 대조는 가짜 Claude: 입금을 조회하고 돌려받은 t2를 근거로 댄다, T16)
 def _run(client, case_id: str, auth: dict[str, str]) -> dict:
     res = client.post(f"{API}/cases/{case_id}/analysis-runs", json={}, headers=auth)
     assert res.status_code == 202, res.text
@@ -120,8 +122,42 @@ def _run(client, case_id: str, auth: dict[str, str]) -> dict:
     raise AssertionError("분석이 끝나지 않았습니다")
 
 
-def test_claude_mode_saves_parsed_rows(tmp_path):
+def test_claude_mode_saves_parsed_rows(tmp_path, monkeypatch):
     from fastapi.testclient import TestClient
+
+    query = {
+        "reason": "사연의 11월 8일 대금 입금을 확인하려고",
+        "from": "2026-11-01",
+        "to": "2026-11-10",
+        "direction": "IN",
+        "counterparty": None,
+        "minAmount": 150000,
+        "maxAmount": 150000,
+    }
+    answer = {
+        "findings": [
+            {
+                "claim": "11월 8일 15만 원을 입금받았습니다",
+                "status": "MATCH",
+                "note": "거래내역서의 입금 행과 같습니다.",
+                "conflict": None,
+                "sources": [
+                    {
+                        "kind": "TRANSACTION",
+                        "quote": None,
+                        "evidenceId": None,
+                        "regionIndex": None,
+                        "transactionId": "t2",
+                    }
+                ],
+            }
+        ],
+        "recommendedDocs": [],
+    }
+    fake_claude.install(
+        monkeypatch,
+        [fake_claude.tool_use(("u1", "get_transactions", query)), fake_claude.text(answer)],
+    )
 
     settings = Settings(
         _env_file=None,
@@ -157,6 +193,5 @@ def test_claude_mode_saves_parsed_rows(tmp_path):
             s for f in result["findings"] for s in f["sources"] if s["kind"] == "TRANSACTION"
         ]
         assert {
-            (s["occurredAt"], s["direction"], s["amountKrw"], s["counterparty"])
-            for s in tx_sources
+            (s["occurredAt"], s["direction"], s["amountKrw"], s["counterparty"]) for s in tx_sources
         } == {("2026-11-08", "IN", 150_000, "김*수")}

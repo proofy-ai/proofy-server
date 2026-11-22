@@ -44,6 +44,7 @@ from app.services.cases import update_case
 from app.services.clock import utc_now
 from app.services.drafts import has_user_edits
 from app.services.evidence import list_evidence
+from app.services.requirements import requirements_for
 from app.services.results import save_output
 from app.services.runs import latest_run
 
@@ -159,6 +160,11 @@ def start_analysis(
         ocr_lang=settings.ocr_lang,
         tesseract_cmd=settings.tesseract_cmd,
         pdftoppm_cmd=settings.pdftoppm_cmd,
+        reported_occurred_at=case.inflow.occurred_at,
+        checklist_labels=tuple(r.label for r in requirements_for(case.inflow.inflow_type)),
+        anthropic_api_key=settings.anthropic_api_key,
+        anthropic_model=settings.anthropic_model,
+        anthropic_effort=settings.anthropic_effort,
     )
     threading.Thread(
         target=_run_in_background,
@@ -178,7 +184,8 @@ def _run_in_background(session_factory: sessionmaker[Session], ctx: RunContext) 
         logger.info("분석 %s: 밖에서 끝난 실행이라 멈춤", ctx.run_id)
         return
     except AgentError as exc:
-        recorder.finish(exc)
+        # 실패해도 외부 AI 비용은 들었으므로 runner가 붙여 준 출력으로 비용을 남긴다
+        recorder.finish(exc, getattr(exc, "output", None))
         return
     except Exception:
         # 내부 내용은 로그에만 남기고 화면에는 공통 문구를 준다
@@ -213,6 +220,24 @@ def _with_step(
         "at": _iso_now(),
     }
     return [*steps, step]
+
+
+def _record_usage(db: Session, run: AnalysisRun, output: AnalysisOutput) -> None:
+    """외부 AI를 부른 실행이면 모델·토큰·비용을 남긴다(T16). 실패한 실행도 남긴다(비용은 들었다)."""
+    if output.model is None:
+        return
+    run.model = output.model
+    run.prompt_version = output.prompt_version
+    db.execute(
+        update(UsageEvent)
+        .where(UsageEvent.run_id == run.id, UsageEvent.kind == "ANALYSIS_RUN")
+        .values(
+            model=output.model,
+            input_tokens=output.input_tokens,
+            output_tokens=output.output_tokens,
+            cost_micro_usd=output.cost_micro_usd,
+        )
+    )
 
 
 def _finish_run(db: Session, run: AnalysisRun, error: AgentError | None) -> bool:
@@ -294,6 +319,8 @@ class DbRecorder:
             run = db.get(AnalysisRun, self._run_id)
             if run is None or run.status != "RUNNING":
                 return
+            if output is not None:
+                _record_usage(db, run, output)
             if error is None and output is not None:
                 save_output(db, run, output)
             _finish_run(db, run, error)

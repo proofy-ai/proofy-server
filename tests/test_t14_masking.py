@@ -1,7 +1,9 @@
 """T14 개인정보 가리기(계약 테스트 아님, T14 계획 테스트 1~6)."""
 
+import json
 import time
 
+import fake_claude
 import pytest
 
 from app.agent.extract.pdf_text import extract_pdf_text
@@ -171,7 +173,9 @@ def _run(client, case_id: str, auth: dict[str, str], **body) -> dict:
     raise AssertionError("분석이 끝나지 않았습니다")
 
 
-def test_claude_mode_saves_masked_text(tmp_path):
+def test_claude_mode_saves_masked_text(tmp_path, monkeypatch):
+    # ② 대조는 가짜 Claude가 서류 줄을 한 번 조회하고 빈 결과를 낸다(T16)
+    sdk = fake_claude.install(monkeypatch, [_read_record_then_answer])
     with _client(tmp_path, "claude") as client:
         body = client.post(f"{API}/cases/sample", json={"scenario": "GOODS"}).json()
         case_id, auth = body["caseId"], {"X-Case-Token": body["caseToken"]}
@@ -181,9 +185,7 @@ def test_claude_mode_saves_masked_text(tmp_path):
 
         with client.app.state.session_factory() as db:
             record = (
-                db.query(Evidence)
-                .filter_by(case_id=case_id, doc_type="TRANSACTION_RECORD")
-                .one()
+                db.query(Evidence).filter_by(case_id=case_id, doc_type="TRANSACTION_RECORD").one()
             )
             assert record.masked_text is not None
             assert all("maskedText" in r for r in record.regions_json)
@@ -196,6 +198,19 @@ def test_claude_mode_saves_masked_text(tmp_path):
             saved = db.get(AnalysisRun, run["runId"]).masked_narrative
             assert "김*수 씨" in saved and "010-****-5678" in saved
             assert "김민수" not in saved and "010-1234-5678" not in saved
+
+    # 외부 AI에 보낸 글(첫 메시지·도구 결과)에도 원래 이름·번호가 없다(원칙 4)
+    sent = repr([r["messages"] for r in sdk.requests])
+    assert "김*수" in sent and "150,000" in sent
+    for value in ("정하늘", "박서진", "김민수", "010-1234-5678", "999-0000-1234-56"):
+        assert value not in sent
+
+
+def _read_record_then_answer(requests):
+    first = requests[0]["messages"][0]["content"][0]["text"]
+    record = next(d for d in json.loads(first)["documents"] if d["docType"] == "TRANSACTION_RECORD")
+    args = {"reason": "거래내역서를 보려고", "evidenceId": record["evidenceId"], "page": None}
+    return fake_claude.tool_use(("u1", "get_evidence_regions", args))
 
 
 def test_scripted_mode_masks_narrative_and_keeps_results(client):

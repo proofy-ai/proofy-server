@@ -5,6 +5,7 @@ description = "Proofy: 지급정지 이의제기 서류 준비를 돕는 웹앱�
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "anthropic>=2.12.0",
     "fastapi>=0.165.0",
     "pillow>=13",
     "psycopg[binary]>=3.2",
