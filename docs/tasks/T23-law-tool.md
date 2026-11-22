@@ -1,6 +1,6 @@
 # T23 법령 조회 도구
 
-- 단계: 3단계 실제 AI(계약 v0.8, 11/22 추가) · 예정: 11/22 오후 · 상태: 대기 · 이슈: 없음 · PR: 없음
+- 단계: 3단계 실제 AI(계약 v0.8, 11/22 추가) · 예정: 11/22 오후 · 상태: PR · 이슈: #60 · PR: (아래 결과)
 
 ## 범위
 
@@ -49,3 +49,9 @@
 - 11/22 사용자 "추천안대로": 정할 것 1~3 추천안
 
 ## 결과
+
+- `app/agent/law.py`: 법 32개 조·시행령 27개 조(부칙 제외) + 별지 제4호 1조각. 개정 이력 표시(`<개정 …>`, `[본조신설 …]`)는 조회 글에서 뺌. label은 "법 제2조의2", "법 제7조 제1항 제2호"처럼 법령 인용 꼴
+- `app/agent/compare.py`: 도구 `search_law`·`get_law_article`, step `TOOL_CALL` "법령 조회", `seen_law_refs`, 상한 12·14. **프롬프트는 아직 그대로**(법령을 언제 찾을지는 T24에서 의견·질문과 함께 씀)
+- 법령 글도 `mask_text`를 거쳐 보냄(원칙 4 타입 검사). `ref`는 코드 값이라 `seal_payload`의 `CODE_KEYS`에 추가
+- 테스트 공용: `tests/conftest.py` `claude_app`, `tests/flow.py`(샘플 사건·분석 실행). T24부터 씀
+- 테스트: `uv run python -m pytest -q` → 168 passed, 2 skipped / `uv run ruff check .` 통과

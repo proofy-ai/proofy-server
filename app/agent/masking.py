@@ -167,6 +167,8 @@ CODE_KEYS = frozenset(
         "field",
         "kind",
         "problem",
+        # 법령 조항 번호(T23, `agent/law.py`가 만든 값. 예: LAW:7)
+        "ref",
     }
 )
 

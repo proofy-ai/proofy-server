@@ -41,3 +41,23 @@ def client(app) -> Iterator[TestClient]:
     # 처리 못 한 예외도 500 응답으로 받아 보도록 raise_server_exceptions=False
     with TestClient(app, raise_server_exceptions=False) as c:
         yield c
+
+
+@pytest.fixture
+def claude_app(tmp_path) -> Iterator[TestClient]:
+    """`AGENT_LLM=claude` 서버. 글자 추출 도구는 없는 경로로 둬 텍스트 PDF만 읽는다.
+
+    Claude는 테스트마다 `fake_claude.install`로 가짜 SDK를 넣는다.
+    T23부터 공용이고, 앞선 테스트 파일은 각자 정의한다.
+    """
+    missing = "proofy-no-such-tesseract"
+    settings = Settings(
+        _env_file=None,
+        database_url=f"sqlite:///{tmp_path / 'test.sqlite3'}",
+        agent_llm="claude",
+        scripted_stage_delay_seconds=0,
+        tesseract_cmd=missing,
+        pdftoppm_cmd=missing,
+    )
+    with TestClient(create_app(settings), raise_server_exceptions=False) as c:
+        yield c

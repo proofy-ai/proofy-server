@@ -7,7 +7,7 @@ import pytest
 
 from app.services.legal import GUIDES, SNAPSHOT_FILES
 
-LEGAL_DIR = Path(__file__).resolve().parents[1] / "docs" / "legal"
+LEGAL_DIR = Path(__file__).resolve().parents[1] / "app" / "agent" / "law_data"
 
 
 def _squash(text: str) -> str:
