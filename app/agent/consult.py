@@ -51,14 +51,19 @@ def by_phrases(code_hits: tuple[str, ...]) -> ConsultDecision:
 
 
 def check_consult(
-    raw: Any, basis: MaskedText | None, code_hits: tuple[str, ...]
+    raw: Any,
+    basis: MaskedText | None,
+    code_hits: tuple[str, ...],
+    candidates: tuple[str, ...] = (),
 ) -> ConsultDecision:
     """AI의 상담 권유(`compare.OUTPUT_SCHEMA` `consult`)를 확인한다(T10-d).
 
     - 권하고 인용이 원문에 있으면 → 그 인용으로 상담 안내
     - 권했지만 원문에 있는 인용이 없으면 → 코드가 찾은 표현으로 안내, 그것도 없으면 안내 안 함
       (step `VERIFY`)
-    - 권하지 않으면 → 코드가 찾았어도 안내 안 함(step `SAFETY`에 이유)
+    - 권하지 않으면 → 코드가 찾았어도 안내 안 함(AI에 넘긴 후보가 있었으면 step `SAFETY`에 이유)
+
+    `candidates`는 AI에 넘긴 후보 전부(부정문 포함), `code_hits`는 부정문을 뺀 표현이다.
     """
     # drafting → scripted → 이 모듈 순서로 불러오므로 여기서 불러온다(순환 import 방지)
     from app.agent.drafting import JUDGMENT
@@ -66,10 +71,11 @@ def check_consult(
     item = raw if isinstance(raw, dict) else {}
     recommend = item.get("recommend") is True
     if not recommend:
-        if not code_hits:
+        looked = candidates or code_hits
+        if not looked:
             return ConsultDecision()
         reason = str(item.get("reason") or "").strip()[:REASON_CHARS]
-        summary = f"사연의 {_quoted(code_hits)}를 문맥으로 확인해 상담 안내는 하지 않았습니다."
+        summary = f"사연의 {_quoted(looked)}를 문맥으로 확인해 상담 안내는 하지 않았습니다."
         if reason and not JUDGMENT.search(reason):
             summary += f" {reason}"
         return ConsultDecision(None, [("SAFETY", SAFETY_TITLE, summary)])

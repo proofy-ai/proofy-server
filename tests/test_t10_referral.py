@@ -11,7 +11,7 @@ import flow
 import pytest
 
 from app.models import Draft, UsageEvent
-from app.services.safety import find_phrases
+from app.services.safety import find_candidates, find_phrases
 
 API = flow.API
 LENDING = (
@@ -302,3 +302,30 @@ def test_t10e_no_judgement_keys(client, scenario, narrative):
         bad = {k for k in keys for w in JUDGEMENT_WORDS if w in k.lower()}
         assert bad == set()
     assert payloads[0]["agentReview"] is not None
+
+
+# ---- 11/22 결정: 코드는 후보만 찾고 판단은 AI가 한다 ----
+
+
+def test_candidates_keep_negated_phrases():
+    assert find_candidates([NEGATED]) == ["통장을 빌려"]
+    assert find_phrases([NEGATED]) == []
+
+
+def test_negated_phrase_goes_to_agent_and_agent_decides(claude_app, monkeypatch):
+    consult = {"recommend": False, "quotes": [], "reason": "빌려준 적이 없다는 문장"}
+    run, result, sdk, _ = _claude(claude_app, monkeypatch, NEGATED, consult)
+    first = json.loads(sdk.requests[0]["messages"][0]["content"][0]["text"])
+    # 부정문이어도 코드가 미리 거르지 않고 후보로 넘긴다
+    assert first["checkPhrases"] == ["통장을 빌려"]
+    assert result["referral"] is None
+    assert len(_steps(run, "SAFETY")) == 1
+
+
+def test_negated_phrase_is_not_used_when_agent_quote_is_wrong(claude_app, monkeypatch):
+    # AI가 권했지만 인용이 원문에 없으면 대신 보여 줄 표현은 부정문을 뺀 목록에서만 고른다
+    consult = {"recommend": True, "quotes": ["계좌를 팔았습니다"], "reason": "계좌를 넘김"}
+    run, result, _, _ = _claude(claude_app, monkeypatch, NEGATED, consult)
+    assert result["referral"] is None
+    verify = [s["summary"] for s in _steps(run, "VERIFY")]
+    assert "원문에서 확인한 표현이 없어 상담 안내를 하지 않았습니다." in verify

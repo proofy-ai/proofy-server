@@ -49,7 +49,7 @@ from app.services.questions import answer_pairs, check_answers, previous_review,
 from app.services.requirements import requirements_for
 from app.services.results import save_output
 from app.services.runs import latest_run
-from app.services.safety import find_phrases
+from app.services.safety import find_candidates, find_phrases
 from app.services.usage import count_ai_runs_on
 
 logger = logging.getLogger("proofy.analysis")
@@ -191,9 +191,13 @@ def start_analysis(
         # 새 실행은 아직 RUNNING이라 지난 성공 실행이 잡힌다
         previous=previous_review(db, case),
     )
-    # 상담 안내 표현(T10, ⓪ SAFETY): 사연과 지금까지의 답 원문에서 코드 목록으로 찾는다
+    # 상담 안내 표현(T10, ⓪ SAFETY): 사연과 지금까지의 답 원문에서 코드 목록으로 후보를 찾는다.
+    # 판단은 에이전트가 문맥으로 하고, 부정문을 뺀 목록은 AI가 없는 곳에서만 쓴다
+    texts = [ctx.narrative, *(a.answer for a in ctx.answers)]
     ctx = replace(
-        ctx, safety_hits=tuple(find_phrases([ctx.narrative, *(a.answer for a in ctx.answers)]))
+        ctx,
+        safety_candidates=tuple(find_candidates(texts)),
+        safety_hits=tuple(find_phrases(texts)),
     )
     threading.Thread(
         target=_run_in_background,
