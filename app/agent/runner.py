@@ -29,7 +29,7 @@ from app.agent.masking import (
     mask_regions,
     mask_text,
 )
-from app.agent.output import AnalysisOutput
+from app.agent.output import AnalysisOutput, MaskedAnswer
 from app.agent.steps import (
     STAGES,
     AgentError,
@@ -49,6 +49,34 @@ class EvidenceRef:
     original_name: str
     # 분석 시작 때의 추출 상태. `READY`면 다시 읽지 않는다
     extract_status: str = "UPLOADED"
+
+
+@dataclass(frozen=True)
+class AnswerPair:
+    """사용자가 답한 질문과 답 원문(T25). runner가 가린 뒤에만 AI에 간다."""
+
+    question: str
+    answer: str
+
+
+@dataclass(frozen=True)
+class PreviousFinding:
+    claim: str
+    # CONFLICT · UNKNOWN · STATEMENT_ONLY
+    status: str
+    note: str
+
+
+@dataclass(frozen=True)
+class PreviousRun:
+    """지난 성공 분석 성찰(T25, agent-design-v2 4.6). 서비스가 DB에서 모으고 runner가 가린다."""
+
+    # 어긋남·확인 못 함·진술만 항목(일치는 넣지 않음)
+    findings: tuple[PreviousFinding, ...]
+    # 계획 대비 점검 문장(step `VERIFY` "계획 점검"). 없으면 None
+    plan_check: str | None
+    sentences_needing_check: int
+    opinions_needing_check: int
 
 
 @dataclass(frozen=True)
@@ -79,6 +107,10 @@ class RunContext:
     anthropic_effort: str = "low"
     # 샘플 그대로인 사건(T11). AI가 실패하면 미리 만든 결과로 끝낸다(계약 4.10)
     allow_fallback: bool = False
+    # 이 사건에서 지금까지 답한 질문·답(T25, 답한 순서)
+    answers: tuple[AnswerPair, ...] = ()
+    # 지난 성공 분석(T25). 첫 분석이면 None
+    previous: PreviousRun | None = None
 
     def check_deadline(self) -> None:
         if time.monotonic() > self.deadline:
@@ -150,9 +182,13 @@ def _extract_evidence(
 
 def _mask_inputs(ctx: RunContext, out: AnalysisOutput, store: EvidenceStore | None) -> None:
     """읽은 서류 줄과 사연을 가린다(T14). 서류가 바뀌면 이름 목록도 바뀌므로 실행마다 사건 전체를
-    다시 가린다. AI(T16)는 여기서 만든 `maskedText`·`masked_narrative`만 본다."""
+    다시 가린다. AI(T16)는 여기서 만든 `maskedText`·`masked_narrative`만 본다.
+
+    질문·답과 지난 분석 성찰(T25)도 같은 이름 목록으로 가린다. 답 속 `○○○ 씨`도 목록에 넣는다."""
     lines = [r["text"] for ex in out.extractions.values() for r in ex.regions]
     names = collect_names(lines) | collect_narrative_names(ctx.narrative)
+    for pair in ctx.answers:
+        names |= collect_narrative_names(pair.answer)
     for evidence_id, ex in list(out.extractions.items()):
         if ex.status != "READY":
             continue
@@ -161,6 +197,31 @@ def _mask_inputs(ctx: RunContext, out: AnalysisOutput, store: EvidenceStore | No
         if store is not None:
             store.save_masked(evidence_id, regions, masked)
     out.masked_narrative = mask_text(ctx.narrative, names)
+    out.masked_answers = [
+        MaskedAnswer(mask_text(p.question, names), mask_text(p.answer, names)) for p in ctx.answers
+    ]
+    out.masked_previous = _mask_previous(ctx.previous, names)
+
+
+def _mask_previous(previous: PreviousRun | None, names: set[str]) -> dict[str, Any] | None:
+    """지난 분석 성찰을 첫 메시지 `previousRun` 모양으로 가린다(T25)."""
+    if previous is None:
+        return None
+    return {
+        "findings": [
+            {
+                "claim": mask_text(f.claim, names),
+                "status": f.status,
+                "note": mask_text(f.note, names),
+            }
+            for f in previous.findings
+        ],
+        "planCheck": (
+            mask_text(previous.plan_check, names) if previous.plan_check is not None else None
+        ),
+        "sentencesNeedingCheck": previous.sentences_needing_check,
+        "opinionsNeedingCheck": previous.opinions_needing_check,
+    }
 
 
 def _extract_transactions(ctx: RunContext, rec: Recorder, out: AnalysisOutput) -> None:
@@ -250,6 +311,8 @@ def execute_fallback(
     out = AnalysisOutput()
     if failed is not None:
         out.masked_narrative = failed.masked_narrative
+        out.masked_answers = list(failed.masked_answers)
+        out.masked_previous = failed.masked_previous
         out.extractions = dict(failed.extractions)
         out.transactions = list(failed.transactions)
         out.model = failed.model

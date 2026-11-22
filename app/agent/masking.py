@@ -173,6 +173,14 @@ CODE_KEYS = frozenset(
 )
 
 
+def join_masked(parts: Iterable[MaskedText], sep: str = "\n") -> MaskedText:
+    """가린 글끼리 잇는다(T25: 사연 + 질문·답). 가리지 않은 글이 섞이면 `TypeError`."""
+    items = list(parts)
+    if any(not isinstance(p, MaskedText) for p in items):
+        raise TypeError("가리지 않은 글은 이을 수 없습니다")
+    return MaskedText(sep.join(items))
+
+
 def seal_payload(payload: Any) -> MaskedText:
     """외부 AI에 보낼 자료를 JSON 글로 묶는다(원칙 4를 코드로 보장, T16).
 
