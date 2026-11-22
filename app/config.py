@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     analysis_timeout_seconds: float = 150
     # 가짜 분석 단계 사이 쉬는 시간(계약 7절: 4번 화면 진행 표시가 보이게). 테스트는 0
     scripted_stage_delay_seconds: float = 1.0
-    # 서비스 전체 하루 AI 분석 한도(계약 1.1·4.1). 표시는 지금, 막는 것은 T11
+    # 서비스 전체 하루 AI 분석 한도(계약 1.1·4.1). 넘으면 429, 샘플 그대로는 미리 만든 결과(T11-a)
     daily_analysis_limit: int = 300
     # 글자 추출(T13). 비우면 PATH에서 찾는다(Windows는 설치 경로를 넣는다)
     tesseract_cmd: str | None = None
