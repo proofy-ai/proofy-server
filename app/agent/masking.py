@@ -12,6 +12,7 @@
 `MaskedText`는 이 모듈의 함수만 만든다. 외부 AI 호출(`agent/llm.py`, T16)은 이 타입만 받는다.
 """
 
+import json
 import re
 from collections.abc import Iterable
 from typing import Any
@@ -136,5 +137,54 @@ def mask_regions(
 ) -> tuple[list[dict[str, Any]], MaskedText]:
     """서류 줄마다 `maskedText`를 붙인 새 목록과, 가린 줄을 이은 글(`evidence.masked_text`)."""
     names = tuple(names)
-    out = [{**r, "maskedText": str(mask_text(r["text"], names))} for r in regions]
+    # `maskedText`는 `MaskedText` 그대로 둔다.
+    # 외부 AI에 보낼 때 이 타입으로 가린 글인지 확인한다(T16)
+    out = [{**r, "maskedText": mask_text(r["text"], names)} for r in regions]
     return out, MaskedText("\n".join(r["maskedText"] for r in out))
+
+
+def masked_part(source: MaskedText, part: str) -> MaskedText:
+    """가린 글의 일부(거래 행의 거래상대 칸 등)도 가린 글이다. `source` 안에 없으면 거부한다."""
+    if not isinstance(source, MaskedText) or part not in source:
+        raise ValueError("가린 글의 일부가 아닙니다")
+    return MaskedText(part)
+
+
+# `seal_payload`에서 글자 값을 그대로 둘 수 있는 칸.
+# 모두 코드가 만든 값이다(ID, 종류, 날짜, 고정 라벨)
+CODE_KEYS = frozenset(
+    {
+        "evidenceId",
+        "docType",
+        "docTypeLabel",
+        "transactionId",
+        "occurredAt",
+        "direction",
+        "inflowType",
+        "fixedChecklist",
+    }
+)
+
+
+def seal_payload(payload: Any) -> MaskedText:
+    """외부 AI에 보낼 자료를 JSON 글로 묶는다(원칙 4를 코드로 보장, T16).
+
+    글자 값은 `MaskedText`이거나 `CODE_KEYS` 칸의 코드 값이어야 한다. 숫자·참거짓·null은 그대로.
+    가리지 않은 글이 섞여 있으면 `TypeError`.
+    """
+    _check_sealed(payload, None)
+    return MaskedText(json.dumps(payload, ensure_ascii=False))
+
+
+def _check_sealed(value: Any, key: str | None) -> None:
+    if isinstance(value, dict):
+        for k, v in value.items():
+            _check_sealed(v, k)
+    elif isinstance(value, list | tuple):
+        for v in value:
+            _check_sealed(v, key)
+    elif isinstance(value, str):
+        if not isinstance(value, MaskedText) and key not in CODE_KEYS:
+            raise TypeError(f"가리지 않은 글은 외부 AI에 보낼 수 없습니다(칸 {key})")
+    elif value is not None and not isinstance(value, int | float | bool):
+        raise TypeError(f"보낼 수 없는 값입니다(칸 {key})")

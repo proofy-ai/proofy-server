@@ -4,6 +4,7 @@ import io
 import shutil
 import time
 
+import fake_claude
 import pytest
 from PIL import Image
 
@@ -95,8 +96,11 @@ def test_parse_tsv_groups_words_into_lines():
 
 # d: AGENT_LLM=claude면 분석 ① 단계가 실제로 읽어 저장하고, 다시 분석하면 읽은 것을 다시 쓴다
 @pytest.fixture
-def claude_client(tmp_path):
+def claude_client(tmp_path, monkeypatch):
     from fastapi.testclient import TestClient
+
+    # ② 대조는 가짜 Claude가 빈 결과를 낸다(T16). 여기서는 ① 추출만 본다
+    fake_claude.install(monkeypatch, [])
 
     settings = Settings(
         _env_file=None,

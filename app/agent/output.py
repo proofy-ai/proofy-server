@@ -95,3 +95,9 @@ class AnalysisOutput:
     # 서류별로 읽은 글자(evidenceId → 추출 결과). ① 단계가 채우고 runner가 줄마다 `maskedText`를
     # 붙인다(T14). 저장은 그때 이미 끝났다. AI에는 `maskedText`만 보낸다
     extractions: dict[str, Extraction] = field(default_factory=dict)
+    # 외부 AI를 부른 실행만 채운다(T16). 비용 기록용(`analysis_runs.model`, `usage_events`)
+    model: str | None = None
+    prompt_version: str | None = None
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    cost_micro_usd: int | None = None

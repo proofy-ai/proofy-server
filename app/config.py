@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     agent_llm: Literal["scripted", "claude"] = "scripted"
     demo_mode: bool = True
     anthropic_api_key: str | None = None
+    # 대조 에이전트 모델·effort(agent-design 5절). Opus 5.5 기본 effort는 medium이라 명시한다
+    anthropic_model: str = "claude-opus-5-5"
+    anthropic_effort: Literal["low", "medium", "high", "xhigh", "max"] = "low"
     # 분석 마감(계약 4.10: 서버는 150초에 스스로 실패 처리)
     analysis_timeout_seconds: float = 150
     # 가짜 분석 단계 사이 쉬는 시간(계약 7절: 4번 화면 진행 표시가 보이게). 테스트는 0

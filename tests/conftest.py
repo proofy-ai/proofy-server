@@ -1,10 +1,21 @@
 from collections.abc import Iterator
 
+import anthropic
 import pytest
 from fastapi.testclient import TestClient
 
 from app.config import Settings
 from app.main import create_app
+
+
+@pytest.fixture(autouse=True)
+def _no_real_claude(monkeypatch):
+    """테스트에서 실제 Claude API를 부르지 않는다(비용·키). 가짜는 `tests/fake_claude.py`."""
+
+    def blocked(*args, **kwargs):
+        raise AssertionError("테스트에서 실제 Claude 클라이언트를 만들면 안 됩니다")
+
+    monkeypatch.setattr(anthropic, "Anthropic", blocked)
 
 
 @pytest.fixture
