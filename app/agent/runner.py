@@ -111,6 +111,8 @@ class RunContext:
     answers: tuple[AnswerPair, ...] = ()
     # 지난 성공 분석(T25). 첫 분석이면 None
     previous: PreviousRun | None = None
+    # 표현 목록이 사연·답 원문에서 찾은 상담 안내 표현(T10, 서비스 계층이 찾음)
+    safety_hits: tuple[str, ...] = ()
 
     def check_deadline(self) -> None:
         if time.monotonic() > self.deadline:
@@ -201,6 +203,7 @@ def _mask_inputs(ctx: RunContext, out: AnalysisOutput, store: EvidenceStore | No
         MaskedAnswer(mask_text(p.question, names), mask_text(p.answer, names)) for p in ctx.answers
     ]
     out.masked_previous = _mask_previous(ctx.previous, names)
+    out.masked_check_phrases = [mask_text(p, names) for p in ctx.safety_hits]
 
 
 def _mask_previous(previous: PreviousRun | None, names: set[str]) -> dict[str, Any] | None:
@@ -273,6 +276,9 @@ def execute(ctx: RunContext, rec: Recorder, store: EvidenceStore | None = None) 
                     _extract_evidence(ctx, rec, store, out)
                 _mask_inputs(ctx, out, store)
                 _extract_transactions(ctx, rec, out)
+            if stage == "DRAFTING" and out.referral is not None:
+                # 상담 안내로 끝나면 초안을 만들지 않는다(T10, 계약 4.11). 단계 표시는 넘어간다
+                continue
             steps[stage](ctx, rec, out)
         ctx.check_deadline()
     except AgentError as exc:

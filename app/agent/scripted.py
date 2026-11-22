@@ -11,6 +11,7 @@ import time
 from datetime import date, timedelta
 
 from app.agent import law
+from app.agent.consult import REFERRAL_QUESTION, by_phrases
 from app.agent.output import (
     AnalysisOutput,
     Conflict,
@@ -135,6 +136,14 @@ class ScriptedAnalyzer:
         self._pause(ctx)
         plan = PLANS.get(ctx.inflow_type, PLAN_OTHER)
         # 조사 계획(T24, agent-design-v2 4.3). 실제 분석의 `make_plan` 줄과 같은 모양
+        # 상담 안내(T10): 가짜 분석·미리 만든 결과는 표현 목록만으로 정한다(계약 4.9)
+        decision = by_phrases(ctx.safety_hits)
+        if decision.phrases is not None:
+            for step in decision.steps:
+                rec.step(*step)
+            out.referral = decision.phrases
+            out.questions = [REFERRAL_QUESTION]
+            return
         # 다시 분석이면 고정 revision(T25). 답 내용은 읽지 않는다(계약 7절)
         revision = REVISION if ctx.previous is not None else None
         rec.step("TOOL_CALL", "조사 계획", plan_summary(plan, revision))
@@ -156,6 +165,8 @@ class ScriptedAnalyzer:
         rec.step("VERIFY", "계획 점검", f"계획한 확인 {len(plan)}개를 모두 마쳤습니다.")
 
     def draft(self, ctx: RunContext, rec: Recorder, out: AnalysisOutput) -> None:
+        if out.referral is not None:  # 상담 안내면 초안 없음(미리 만든 결과도 같은 길)
+            return
         self._pause(ctx)
         if ctx.inflow_type == "GOODS":
             sentences = _goods_draft()

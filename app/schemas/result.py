@@ -119,6 +119,21 @@ class AgentReview(CamelModel):
     answered: list[AnsweredQuestion]
 
 
+class ReferralContact(CamelModel):
+    name: str
+    phone: str
+
+
+class Referral(CamelModel):
+    """상담 안내(T10, 계약 4.11). 판정이 아니라 상담이 먼저 필요해 보이는 표현을 알린다."""
+
+    code: Literal["LEGAL_CONSULT"]
+    # 서버가 사연·답 원문에 있다고 확인한 글자
+    matched_phrases: list[str]
+    message: str
+    contacts: list[ReferralContact]
+
+
 class ResultSummary(CamelModel):
     finding_counts: dict[FindingStatus, int]
     missing_documents: int
@@ -132,8 +147,8 @@ class ResultResponse(CamelModel):
     is_stale: bool
     generated_at: UtcDatetime
     precomputed: bool
-    # 상담 안내(T10). 지금은 항상 null
-    referral: dict | None
+    # 상담 안내(T10). 보통 null. 있으면 findings 빈 목록, draft null, summary 모두 0
+    referral: Referral | None
     # AI 의견·질문(T24). 의견·질문·답한 기록이 모두 없으면 null(v0.8 전 결과 포함)
     agent_review: AgentReview | None
     ai_notice: str
