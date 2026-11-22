@@ -6,10 +6,13 @@ from app.models.checklist import ChecklistItemRow
 from app.models.draft import Draft
 from app.models.evidence import Evidence, EvidenceFile
 from app.models.finding import ClaimFinding, FindingSource
+from app.models.review import AnalysisOpinion, AnalysisQuestion
 from app.models.transaction import Transaction
 from app.models.usage import UsageEvent
 
 __all__ = [
+    "AnalysisOpinion",
+    "AnalysisQuestion",
     "AnalysisRun",
     "Case",
     "CaseInflow",

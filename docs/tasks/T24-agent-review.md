@@ -1,6 +1,6 @@
 # T24 AI 의견·질문 (`agentReview`)
 
-- 단계: 3단계 실제 AI(계약 v0.8, 11/22 추가) · 예정: 11/22 오후 · 상태: 대기 · 이슈: 없음 · PR: 없음
+- 단계: 3단계 실제 AI(계약 v0.8, 11/22 추가) · 예정: 11/22 오후 · 상태: PR · 이슈: #62 · PR: (아래 결과)
 
 ## 범위
 
@@ -22,7 +22,7 @@
 
 (11/22 T23·T24·T25·T10을 한꺼번에 작성)
 
-**두 번에 나눠 PR을 낸다.** ① 가짜 분석 + 저장 + 결과 API(FE가 바로 붙일 수 있게 먼저 배포) ② 실제 Claude 출력·검증·고쳐 쓰기.
+~~두 번에 나눠 PR을 낸다.~~ → **PR 하나로 냄(11/22 구현 중 변경).** 배포 서버는 `AGENT_LLM=scripted`라 실제 Claude 경로가 들어가도 꺼져 있고, 머지 한 번으로 FE 연동이 가능해 검토·머지를 한 번 줄였다. ① 가짜 분석 + 저장 + 결과 API ② 실제 Claude 출력·검증·고쳐 쓰기.
 
 ### 바꿀 파일
 | 파일 | 내용 |
@@ -60,5 +60,13 @@
 ## 결정
 
 - 11/22 사용자 "추천안대로": 정할 것 1~3 추천안, 계약 테스트 T24-a~c·T16-a 수정 승인
+- 11/22 사용자: 조사 계획(`make_plan`)·계획 대비 점검 추가(`docs/agent-design-v2.md`)
 
 ## 결과
+
+- 표 `analysis_opinions`·`analysis_questions`(`app/models/review.py`, 새 표만 → 배포 DB 초기화 불필요), `app/services/review.py`(저장·`agentReview`), 결과 응답 `agentReview`
+- 가짜 분석: 조사 계획 줄 → 거래내역 조회 → 법령 조회 → 계획 점검, GOODS·UNEXPECTED 의견 1·질문 2(근거 조항은 `law.law_ref`로 실제 원문 대조, label "법 제7조 제1항 제2호/제3호"). 급여·기타는 의견·질문 없음 → `agentReview: null`
+- 실제 분석: `make_plan` 도구(조회 한도에 안 셈, 2번까지, 판정 표현이 든 `revision`은 화면에서 뺌), 출력 `findings[].planItem`·`opinions`·`questions`, `verify`가 근거 번호 다시 맞춤·법령 인용 대조(`LAW_QUOTE_NOT_FOUND`), `drafting.check_opinion`(숫자·결과 예측·"해당합니다") + 초안과 같은 고쳐 쓰기 호출 1회, step `VERIFY` "계획 점검"·"의견 확인". `PROMPT_VERSION` t24-v1. `drafting._JUDGMENT` → `JUDGMENT`(공용)
+- 테스트: T24-a(2), T24-b, T24-c(2), 계획 도구 2, `agentReview: null`, T16-a·도구 이유 테스트 수정, T08 결과 키·조회 줄 찾기 수정
+- 관찰: 테스트가 느려짐(claude 모드 실행 1회 약 10초). 원인은 이 작업이 아니라 Tesseract 없는 PC에서 PNG 전처리(장당 약 4초). 전체 실행 70초 → 230초(PC 부하일 수 있음, 미확인)
+- 미검증: 실제 Claude가 계획·법령 조회·의견·질문을 잘 내는지(가짜 SDK로만 확인). 6번 실제 Claude 점검에서 test01·test02로 확인

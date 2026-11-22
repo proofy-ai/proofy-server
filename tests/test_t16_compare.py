@@ -121,6 +121,15 @@ def test_t16a_output_schema_has_no_judgement_fields():
         "label",
         "reason",
         "acceptedDocTypes",
+        # T24: 계획 항목 번호, 조건부 의견·질문(근거 번호·법령 근거)
+        "planItem",
+        "opinions",
+        "questions",
+        "text",
+        "why",
+        "findingIndexes",
+        "lawRefs",
+        "ref",
     }
     status = OUTPUT_SCHEMA["properties"]["findings"]["items"]["properties"]["status"]
     assert set(status["enum"]) == {"MATCH", "CONFLICT", "STATEMENT_ONLY", "UNKNOWN"}
@@ -290,6 +299,7 @@ def test_client_without_key_fails_clearly():
 
 
 def test_tools_require_reason():
-    for tool in TOOLS:
+    # 조사 계획(T24)은 조회가 아니라 이유 대신 계획 항목을 받는다
+    for tool in (t for t in TOOLS if t["name"] != "make_plan"):
         assert "reason" in tool["input_schema"]["required"]
         assert tool["strict"] is True

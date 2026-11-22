@@ -18,11 +18,9 @@ import re
 from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
-from typing import Literal
 
 from app.agent.masking import MaskedText, mask_text
-
-LawSource = Literal["LAW", "DECREE", "FORM4"]
+from app.agent.output import LawRef, LawSource
 
 DATA_DIR = Path(__file__).resolve().parent / "law_data"
 FILES: dict[LawSource, str] = {
@@ -234,3 +232,16 @@ def check_quote(ref: str, quote: str) -> tuple[bool, str | None]:
             return True, label
         offset += len(part)
     return True, a.label
+
+
+def law_ref(ref: str, quote: str, seen: set[str] | None = None) -> LawRef | None:
+    """AI(또는 가짜 분석)가 단 근거 조항을 서버가 확인한 모양으로. 없는 조항이면 None.
+
+    `seen`을 주면 그 실행에서 도구가 실제로 돌려준 조항만 `verified`가 될 수 있다(T24).
+    """
+    a = article(ref)
+    if a is None:
+        return None
+    found, label = check_quote(a.ref, quote)
+    verified = found and (seen is None or a.ref in seen)
+    return LawRef(a.ref, a.source, (label if verified else a.label) or a.label, quote, verified)

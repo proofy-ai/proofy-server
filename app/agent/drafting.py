@@ -17,12 +17,13 @@
 import json
 import logging
 import re
+from dataclasses import replace
 from typing import Any
 
 from app.agent.llm import ClaudeClient, user_text
 from app.agent.masking import MaskedText, mask_text, seal_payload
 from app.agent.numbers import amounts, month_days
-from app.agent.output import AnalysisOutput, DraftSentence, Finding
+from app.agent.output import AnalysisOutput, DraftSentence, Finding, Opinion
 from app.agent.runner import RunContext
 from app.agent.scripted import DOC_TYPE_LABELS
 from app.agent.steps import Recorder
@@ -38,11 +39,12 @@ SECTION_WORDS = {
 }
 MAX_SENTENCES = 12
 SENTENCE_CHARS = 300
+OPINION_CHARS = 400
 # 고쳐 쓰기를 부르려면 마감까지 이만큼 남아 있어야 한다(agent-design 2.6)
 REWRITE_MIN_SECONDS = 40.0
 
 # 판정·예측처럼 읽히는 표현(원칙 1). 사실 서술에는 거의 나오지 않는 꼴만 넣는다
-_JUDGMENT = re.compile(
+JUDGMENT = re.compile(
     r"해제\s*(?:될|됩|되리|되어야|해\s*주실\s*것)"
     r"|풀릴|풀려야|풀어\s*주실\s*것"
     r"|확실(?:히|합|하다|한)"
@@ -60,12 +62,26 @@ _JUDGMENT = re.compile(
     r"|100\s*%"
 )
 
+# 의견에만 더 보는 확정 표현(T24 결정 2). 의견 형식 "설명할 수 있는 사정으로 보여요"는 통과
+CONFIRM = re.compile(r"해당\s*(?:합니다|됩니다|한다|된다|해요|돼요)")
+# AI가 고쳐 쓸 수 있는 사유(agent-design-v2 4.5)
+REWRITABLE = ("NUMBER_MISMATCH", "JUDGMENT_EXPRESSION")
+
 PROBLEMS = {
     "NUMBER_MISMATCH": (
         "문장 속 금액이나 날짜가 연결한 근거 자료에 없습니다. 근거에 있는 값으로 고치거나 빼세요."
     ),
     "JUDGMENT_EXPRESSION": (
         "결과를 판정하거나 예측하는 표현이 있습니다. 사실만 서술하도록 고치세요."
+    ),
+}
+OPINION_PROBLEMS = {
+    "NUMBER_MISMATCH": (
+        "의견 속 금액이나 날짜가 기댄 항목의 근거에 없습니다. 근거에 있는 값으로 고치거나 빼세요."
+    ),
+    "JUDGMENT_EXPRESSION": (
+        "결과를 예측하거나 단정하는 표현이 있습니다. "
+        "'…로 설명할 수 있는 사정으로 보여요'처럼 조건부로 고치세요."
     ),
 }
 
@@ -100,14 +116,11 @@ def draft_schema(finding_count: int) -> dict[str, Any]:
     )
 
 
-REWRITE_SCHEMA = _object(
-    {
-        "sentences": {
-            "type": "array",
-            "items": _object({"index": {"type": "integer"}, "text": {"type": "string"}}),
-        }
-    }
-)
+_REWRITTEN = {
+    "type": "array",
+    "items": _object({"index": {"type": "integer"}, "text": {"type": "string"}}),
+}
+REWRITE_SCHEMA = _object({"sentences": _REWRITTEN, "opinions": _REWRITTEN})
 
 SYSTEM_PROMPT = """\
 당신은 계좌가 지급정지된 청년이 은행에 내는 이의제기신청서의
@@ -140,7 +153,11 @@ SYSTEM_PROMPT = """\
 
 ## 고쳐 쓰기
 - 나중 메시지에 rewrite 목록이 오면 각 문장을 problem에 맞게 고쳐
-  {index, text}로만 답합니다. 근거와 연결(findingIndexes)은 바뀌지 않습니다
+  sentences에 {index, text}로만 답합니다. 근거와 연결(findingIndexes)은 바뀌지 않습니다
+- opinions 목록이 오면 결과 화면에 보이는 AI 의견입니다(초안이 아님). problem에 맞게 고쳐
+  opinions에 {index, text}로 답합니다. "말씀하신 내용과 자료를 기준으로 보면 …로 설명할 수 있는
+  사정으로 보여요"처럼 조건부로 쓰고, 결과를 예측하거나 단정하지 않습니다
+- 고칠 것이 없는 쪽은 빈 배열입니다
 """
 
 
@@ -162,11 +179,19 @@ class Drafter:
 
         checked = [check_sentence(s, findings, out, ctx) for s in sentences]
         flagged = [i for i, reason in enumerate(checked) if reason]
-        fixed = 0
-        if flagged and self._client.deadline.remaining() >= REWRITE_MIN_SECONDS:
-            fixed = self._rewrite(ctx, out, messages, sentences, checked, flagged)
-        elif flagged:
+        # 의견(T24)도 같은 고쳐 쓰기 호출 1회에 넣는다. 법령 인용 못 찾음은 고치지 않는다
+        op_reasons = [check_opinion(o, findings, out, ctx) for o in out.opinions]
+        op_flagged = [i for i, r in enumerate(op_reasons) if r in REWRITABLE]
+        fixed = op_fixed = 0
+        if (flagged or op_flagged) and self._client.deadline.remaining() >= REWRITE_MIN_SECONDS:
+            fixed, op_fixed = self._rewrite(
+                ctx, out, messages, sentences, checked, flagged, op_reasons, op_flagged
+            )
+        elif flagged or op_flagged:
             logger.info("초안 %s: 마감이 가까워 고쳐 쓰기를 건너뜀", ctx.run_id)
+        out.opinions[:] = [
+            replace(o, check_reason=op_reasons[i]) for i, o in enumerate(out.opinions)
+        ]
 
         out.draft_sentences += [
             DraftSentence(s.section, s.text, s.finding_indexes, checked[i])
@@ -184,6 +209,16 @@ class Drafter:
             if left:
                 parts.append(f"확인 필요로 남긴 문장 {left}개")
             rec.step("VERIFY", "초안 확인", ". ".join(parts) + ".")
+        op_left = sum(1 for r in op_reasons if r)
+        if op_fixed or op_left:
+            parts = []
+            if op_fixed:
+                parts.append(
+                    f"예측·숫자 표현이 걸린 의견 {op_fixed}개를 AI가 고쳐 다시 확인했습니다"
+                )
+            if op_left:
+                parts.append(f"확인 필요로 남긴 의견 {op_left}개")
+            rec.step("VERIFY", "의견 확인", ". ".join(parts) + ".")
 
     def _rewrite(
         self,
@@ -193,9 +228,14 @@ class Drafter:
         sentences: list[DraftSentence],
         checked: list[str | None],
         flagged: list[int],
-    ) -> int:
-        """걸린 문장만 1회 고쳐 쓰게 한다. 다시 검사해 통과한 문장만 바꾸고 바꾼 개수를 돌려준다."""
-        payload = {
+        op_reasons: list[str | None],
+        op_flagged: list[int],
+    ) -> tuple[int, int]:
+        """걸린 문장·의견만 1회 고쳐 쓰게 한다. 다시 검사해 통과한 것만 바꾼다.
+
+        바꾼 (문장 수, 의견 수)를 돌려준다.
+        """
+        payload: dict[str, Any] = {
             "rewrite": [
                 {
                     "index": i,
@@ -206,6 +246,15 @@ class Drafter:
                 for i in flagged
             ]
         }
+        if op_flagged:
+            payload["opinions"] = [
+                {
+                    "index": i,
+                    "text": mask_text(out.opinions[i].text),
+                    "problem": OPINION_PROBLEMS[op_reasons[i] or "JUDGMENT_EXPRESSION"],
+                }
+                for i in op_flagged
+            ]
         messages.append({"role": "user", "content": [user_text(seal_payload(payload))]})
         turn = self._client.turn(SYSTEM_PROMPT, [], REWRITE_SCHEMA, messages)
         raw = _parse(turn.text()) or {}
@@ -223,7 +272,21 @@ class Drafter:
                 sentences[i] = candidate
                 checked[i] = None
                 fixed += 1
-        return fixed
+        op_fixed = 0
+        for item in raw.get("opinions") or []:
+            if not isinstance(item, dict):
+                continue
+            i, text = item.get("index"), item.get("text")
+            if i not in op_flagged or not isinstance(text, str) or not text.strip():
+                continue
+            candidate_op = replace(
+                out.opinions[i], text=text.strip()[:OPINION_CHARS], check_reason=None
+            )
+            if check_opinion(candidate_op, out.findings, out, ctx) is None:
+                out.opinions[i] = candidate_op
+                op_reasons[i] = None
+                op_fixed += 1
+        return fixed, op_fixed
 
 
 def check_sentence(
@@ -236,7 +299,22 @@ def check_sentence(
         allowed_amounts, allowed_days = _allowed_numbers(linked, out, ctx)
         if amounts(sentence.text) - allowed_amounts or month_days(sentence.text) - allowed_days:
             return "NUMBER_MISMATCH"
-    if _JUDGMENT.search(sentence.text):
+    if JUDGMENT.search(sentence.text):
+        return "JUDGMENT_EXPRESSION"
+    return None
+
+
+def check_opinion(
+    opinion: Opinion, findings: list[Finding], out: AnalysisOutput, ctx: RunContext
+) -> str | None:
+    """의견 하나의 검사 사유(T24). 법령 인용 못 찾음(②에서 정함) → 숫자 → 예측·확정 표현."""
+    if opinion.check_reason == "LAW_QUOTE_NOT_FOUND":
+        return opinion.check_reason
+    linked = [findings[i] for i in opinion.finding_indexes if 0 <= i < len(findings)]
+    allowed_amounts, allowed_days = _allowed_numbers(linked, out, ctx)
+    if amounts(opinion.text) - allowed_amounts or month_days(opinion.text) - allowed_days:
+        return "NUMBER_MISMATCH"
+    if JUDGMENT.search(opinion.text) or CONFIRM.search(opinion.text):
         return "JUDGMENT_EXPRESSION"
     return None
 

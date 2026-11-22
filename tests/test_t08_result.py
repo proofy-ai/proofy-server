@@ -14,6 +14,8 @@ RESULT_KEYS = {
     "generatedAt",
     "precomputed",
     "referral",
+    # 계약 v0.8 AI 의견·질문(T24)
+    "agentReview",
     "aiNotice",
     "deadline",
     "findings",
@@ -215,7 +217,8 @@ def test_steps_have_tool_call_reasons(client):
     types = [s["type"] for s in run["steps"]]
     assert types.count("OCR") == 3
     assert "CONFLICT" in types
-    tool = next(s for s in run["steps"] if s["type"] == "TOOL_CALL")
+    # 조사 계획(T24)도 TOOL_CALL이라 거래내역 조회 줄을 제목으로 찾는다
+    tool = next(s for s in run["steps"] if s["title"] == "거래내역 조회")
     assert tool["summary"] == "사연의 11월 8일 대금 입금을 확인하려고 11/1~11/10 입금을 조회 → 2건"
     assert all(isinstance(s["summary"], str) and s["summary"] for s in run["steps"])
 

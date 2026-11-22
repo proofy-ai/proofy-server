@@ -85,6 +85,45 @@ class DraftSentence:
     check_reason: str | None = None
 
 
+LawSource = Literal["LAW", "DECREE", "FORM4"]
+
+# 한 실행당 의견·질문 상한(계약 4.11)
+MAX_OPINIONS = 3
+MAX_QUESTIONS = 3
+
+
+@dataclass(frozen=True)
+class LawRef:
+    """근거 조항(T23·T24). `label`·`verified`는 서버가 원문과 대조해 붙인다(`agent/law.py`)."""
+
+    ref: str
+    source: LawSource
+    label: str
+    quote: str
+    verified: bool
+
+
+@dataclass(frozen=True)
+class Opinion:
+    """AI 조건부 의견(T24). 근거는 대조 항목 번호와 법령 조항으로만. 초안에는 넣지 않는다."""
+
+    text: str
+    finding_indexes: tuple[int, ...] = ()
+    law_refs: tuple[LawRef, ...] = ()
+    # 서버 검사 사유: LAW_QUOTE_NOT_FOUND · JUDGMENT_EXPRESSION · NUMBER_MISMATCH. 있으면 확인 필요
+    check_reason: str | None = None
+
+
+@dataclass(frozen=True)
+class Question:
+    """AI 질문(T24). 사용자가 답하면 다음 분석에 넘긴다(T25)."""
+
+    text: str
+    why: str
+    finding_indexes: tuple[int, ...] = ()
+    law_refs: tuple[LawRef, ...] = ()
+
+
 @dataclass
 class AnalysisOutput:
     """세 단계가 차례로 채운다."""
@@ -95,6 +134,9 @@ class AnalysisOutput:
     findings: list[Finding] = field(default_factory=list)
     recommended: list[RecommendedDoc] = field(default_factory=list)
     draft_sentences: list[DraftSentence] = field(default_factory=list)
+    # AI 의견·질문(T24, 계약 4.11 `agentReview`). 번호는 `findings` 순서(0부터)
+    opinions: list[Opinion] = field(default_factory=list)
+    questions: list[Question] = field(default_factory=list)
     # 서류별로 읽은 글자(evidenceId → 추출 결과). ① 단계가 채우고 runner가 줄마다 `maskedText`를
     # 붙인다(T14). 저장은 그때 이미 끝났다. AI에는 `maskedText`만 보낸다
     extractions: dict[str, Extraction] = field(default_factory=dict)
