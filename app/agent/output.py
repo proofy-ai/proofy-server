@@ -74,12 +74,15 @@ class DraftSentence:
     """초안 문장. 근거는 `AnalysisOutput.findings`의 번호(0부터)로만 가리킨다.
 
     서버가 번호를 이 실행의 대조 항목 ID로 바꾸고, 없는 번호는 버린다(원칙 3).
-    확인 필요 여부는 분석기가 정하지 않는다(`app/services/drafts.py`).
+    확인 필요 여부는 서버가 정한다(`app/services/drafts.py`). 분석기는 검사 사유만 넘긴다.
     """
 
     section: DraftSection
     text: str
     finding_indexes: tuple[int, ...] = ()
+    # 분석기 후검증(T17)이 남긴 사유. `NUMBER_MISMATCH`·`JUDGMENT_EXPRESSION`만.
+    # 최종 확인 필요 여부와 사유 순서는 서버가 정한다(`app/services/drafts.py`)
+    check_reason: str | None = None
 
 
 @dataclass
