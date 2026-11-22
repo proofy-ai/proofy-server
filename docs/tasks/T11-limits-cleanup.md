@@ -67,5 +67,6 @@
 - `app/services/analysis.py`: `is_unchanged_sample`, 하루 한도 검사(대상이면 AI 없이 대체, 아니면 `429 DAILY_LIMIT`), 분석 스레드의 실패 경로(AI 실패·예상 못 한 예외·결과 저장 실패)에서 대체, 대상 사건 AI 마감 당김, `analysis_runs`·`usage_events`의 `precomputed`
 - 테스트: `tests/test_t11_fallback.py`(T11-a-1~3). `test_t16_compare.py`의 거절 테스트는 샘플 그대로면 대체 결과로 끝나므로 사연을 고친 사건으로 바꿈
 - `uv run python -m pytest -q` 180 passed·2 skipped, `uv run ruff check .` 통과(11/22)
-- 미검증: 실제 Claude 실패에서의 대체(가짜 SDK 거절로만 확인), 배포 서버
+- 로컬 실서버 확인(11/22, 틀린 API 키로 실제 Anthropic 401 → 비용 0): `AGENT_LLM=claude` 서버에서 GOODS·UNEXPECTED 샘플이 `SUCCEEDED`·마지막 step `FALLBACK`·`precomputed: true`, 대조 3·4개, 의견 1·질문 2, 초안 3·5문장, `GET /draft` 200, 사건 `REVIEW_READY`(15.5초·6.2초). 고친 샘플은 `FAILED`·결과 404. `DAILY_ANALYSIS_LIMIT=0` 서버: 샘플 0.6초에 `FALLBACK`만·Anthropic 호출 0회, 고친 샘플 `429 DAILY_LIMIT`
+- 미검증: 배포 서버, 시간 초과(140초)로 인한 대체(자동 테스트·실서버 모두 안 함)
 
