@@ -11,6 +11,7 @@ from app.api import analysis, cases, checklist, draft, evidence, health, meta, r
 from app.config import Settings, get_settings
 from app.db import init_db, make_engine, make_session_factory
 from app.errors import register_error_handlers
+from app.services.cleanup import Cleaner
 
 logging.basicConfig(level=logging.INFO)
 
@@ -19,16 +20,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
     engine = make_engine(settings.database_url)
 
+    session_factory = make_session_factory(engine)
+
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         init_db(engine)
+        # 24시간 자동 삭제(T11-b): 켜질 때 한 번, 그 뒤 주기마다
+        cleaner = Cleaner(session_factory, settings.cleanup_interval_seconds)
+        cleaner.start()
         yield
+        cleaner.stop()
         engine.dispose()
 
     app = FastAPI(title="Proofy API", version="0.1.0", lifespan=lifespan)
     app.state.settings = settings
     app.state.engine = engine
-    app.state.session_factory = make_session_factory(engine)
+    app.state.session_factory = session_factory
 
     app.add_middleware(
         CORSMiddleware,

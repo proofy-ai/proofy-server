@@ -1,10 +1,12 @@
 """사건 만들기·조회·수정·삭제(계약 4.3~4.6). D-day는 응답마다 오늘(한국 날짜)로 다시 계산한다."""
 
 import uuid
+from dataclasses import dataclass
 from datetime import date, timedelta
 
 from sqlalchemy.orm import Session
 
+from app.config import Settings
 from app.errors import ApiError
 from app.models import Case, CaseInflow
 from app.schemas.case import CaseCreate, CaseOut, CasePatch, InflowIn, InflowOut, LatestRun
@@ -13,10 +15,23 @@ from app.services.clock import utc_now
 from app.services.deadline import compute_deadline
 from app.services.evidence import count_evidence
 from app.services.runs import has_result, latest_run
+from app.services.usage import check_case_create_limit, hash_ip, record_case_create
 
 CASE_TTL = timedelta(hours=24)
 FUTURE_DATE = "미래 날짜는 입력할 수 없습니다."
 NOT_NULL = "비울 수 없는 값입니다."
+
+
+@dataclass(frozen=True)
+class Creator:
+    """사건을 만드는 요청(T11-b 시간당 한도). IP는 해시로만 갖는다."""
+
+    ip_hash: str | None
+    hourly_limit: int
+
+
+def creator_for(settings: Settings, ip: str | None) -> Creator:
+    return Creator(hash_ip(settings.ip_hash_secret, ip), settings.rate_limit_cases_per_ip_hour)
 
 
 def _check_not_future(fields: dict[str, str], name: str, value: date | None, today: date) -> None:
@@ -29,7 +44,9 @@ def _raise_if_invalid(fields: dict[str, str]) -> None:
         raise ApiError(400, "VALIDATION_ERROR", "입력값을 확인해 주세요.", {"fields": fields})
 
 
-def create_case(db: Session, payload: CaseCreate, today: date) -> tuple[Case, str]:
+def create_case(
+    db: Session, payload: CaseCreate, today: date, creator: Creator | None = None
+) -> tuple[Case, str]:
     """사건을 만들고 (사건, 토큰 원문)을 돌려준다."""
     fields: dict[str, str] = {}
     _check_not_future(fields, "noticeReceivedDate", payload.notice_received_date, today)
@@ -37,15 +54,25 @@ def create_case(db: Session, payload: CaseCreate, today: date) -> tuple[Case, st
     _check_not_future(fields, "inflow.occurredAt", payload.inflow.occurred_at, today)
     _raise_if_invalid(fields)
 
-    case, token = stage_case(db, payload)
+    case, token = stage_case(db, payload, creator=creator)
     db.commit()
     return case, token
 
 
-def stage_case(db: Session, payload: CaseCreate, narrative: str | None = None) -> tuple[Case, str]:
-    """사건과 입금 정보를 세션에 넣는다(커밋은 부르는 쪽이 한다). 날짜 검사는 부르는 쪽 책임."""
-    token, token_hash = issue_token()
+def stage_case(
+    db: Session,
+    payload: CaseCreate,
+    narrative: str | None = None,
+    creator: Creator | None = None,
+) -> tuple[Case, str]:
+    """사건과 입금 정보를 세션에 넣는다(커밋은 부르는 쪽이 한다). 날짜 검사는 부르는 쪽 책임.
+
+    `creator`가 있으면 같은 IP의 시간당 한도를 검사하고 생성 기록을 남긴다(T11-b).
+    """
     now = utc_now()
+    if creator is not None:
+        check_case_create_limit(db, creator.ip_hash, creator.hourly_limit, now)
+    token, token_hash = issue_token()
     case = Case(
         id=str(uuid.uuid4()),
         access_token_hash=token_hash,
@@ -68,6 +95,8 @@ def stage_case(db: Session, payload: CaseCreate, narrative: str | None = None) -
         created_at=now,
     )
     db.add(case)
+    if creator is not None:
+        record_case_create(db, case.id, creator.ip_hash, now)
     return case, token
 
 

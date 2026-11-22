@@ -3,7 +3,7 @@
 T18에서 정한 배포 방법이다(11/22). 처음 하는 사람도 따라 할 수 있게 순서대로 적는다.
 
 ```
-[GitHub dev 브랜치] --머지하면 자동--> [Render: Dockerfile로 이미지 만들고 실행] <--요청-- [FE (Cloudflare)]
+[GitHub dev 브랜치] --머지 후 Manual Deploy--> [Render: Dockerfile로 이미지 만들고 실행] <--요청-- [FE (Cloudflare)]
                                               |
                                               +--저장·조회--> [Neon: Postgres DB]
 ```
@@ -35,7 +35,7 @@ T18에서 정한 배포 방법이다(11/22). 처음 하는 사람도 따라 할 
 | Language / Runtime | **Docker** |
 | Instance Type | **Free** |
 | Health Check Path (Advanced) | `/api/v1/health` |
-| Auto-Deploy | On Commit (머지하면 자동 배포) |
+| Auto-Deploy | 동작 안 함(아래 4절 "머지했다"). 11/22 확인: `proofy-ai` 조직에 Render GitHub 앱이 없어 공개 레포 주소로 연결됨 |
 
 4. **Environment Variables**
 
@@ -46,6 +46,9 @@ T18에서 정한 배포 방법이다(11/22). 처음 하는 사람도 따라 할 
 | `AGENT_LLM` | `scripted` | T16 뒤 `claude` |
 | `DEMO_MODE` | `true` | |
 | `DAILY_ANALYSIS_LIMIT` | `300` | |
+| `RATE_LIMIT_CASES_PER_IP_HOUR` | 넣지 않음(기본 20) | 같은 IP 사건 생성 시간당 한도. 리허설·심사장에서 같은 와이파이로 많이 만들면 올린다 |
+| `RATE_LIMIT_RUNS_PER_CASE_HOUR` | 넣지 않음(기본 5) | 사건당 분석 시간당 한도 |
+| `IP_HASH_SECRET` | 넣지 않아도 됨 | 비우면 서버가 켜질 때 임의 값(재시작하면 지난 1시간 한도 기록과 안 이어짐) |
 | `ANTHROPIC_API_KEY` | (T16 뒤) | 비밀값 |
 
 `PORT`는 Render가 넣어 주고 서버가 그 값을 쓴다. `TESSERACT_CMD`·`PDFTOPPM_CMD`는 이미지에 설치돼 있어 비워 둔다.
@@ -62,6 +65,9 @@ T18에서 정한 배포 방법이다(11/22). 처음 하는 사람도 따라 할 
 
 | 상황 | 할 일 |
 |---|---|
+| **PR을 dev에 머지했다** | 자동 배포가 안 된다(11/22 확인, 위 Auto-Deploy). Render 서비스 화면 **Manual Deploy → Deploy latest commit** → Events에 그 커밋이 **Deploy live**인지 확인 |
+| 사건이 24시간 뒤 사라졌다 | 정상(계약 2절 ④). 서버가 켜질 때와 10분마다 만료 사건을 DB에서 지운다(T11-b) |
+| `429 RATE_LIMITED`가 난다 | 같은 IP 사건 생성 시간당 20회 또는 사건당 분석 시간당 5회를 넘었다. 시연 중이면 환경변수 값을 올리고 저장(서버 재시작) |
 | **15분 동안 요청이 없으면 서버가 잠든다**(무료). 첫 요청이 약 1분 걸림 | 시연·심사 직전에 `/api/v1/health`를 한 번 열어 깨워 둔다. 필요하면 시연 기간만 유료(Starter)로 |
 | **DB 표 구조가 바뀌는 작업을 머지했다**(Alembic 없음, T18 결정 ②) | Neon **SQL Editor**에서 `DROP SCHEMA public CASCADE; CREATE SCHEMA public;` 실행 → Render에서 **Manual Deploy → Deploy latest commit**(서버가 켜지며 표를 새로 만든다). 데이터는 합성이라 지워도 된다 |
 | 배포가 실패했다 | Render 서비스 화면의 **Logs**·**Events**를 본다. 빌드 단계 실패면 Dockerfile·의존성, 실행 단계 실패면 환경변수(특히 `DATABASE_URL`) |

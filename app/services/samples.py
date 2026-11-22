@@ -17,7 +17,7 @@ from app.models import Case
 from app.schemas.case import CaseCreate, InflowIn
 from app.schemas.common import DocType, InflowType
 from app.schemas.sample import SampleFile, SampleSet, SamplesResponse
-from app.services.cases import stage_case
+from app.services.cases import Creator, stage_case
 from app.services.evidence import detect_mime, stage_evidence
 
 SAMPLE_DIR = Path(__file__).resolve().parent.parent / "samples"
@@ -94,7 +94,9 @@ def _scenario(name: str) -> Scenario:
     return scenario
 
 
-def create_sample_case(db: Session, name: str, today: date) -> tuple[Case, str]:
+def create_sample_case(
+    db: Session, name: str, today: date, creator: Creator | None = None
+) -> tuple[Case, str]:
     """서류가 채워진 샘플 사건을 만들고 (사건, 토큰 원문)을 돌려준다."""
     scenario = _scenario(name)
     payload = CaseCreate(
@@ -107,7 +109,7 @@ def create_sample_case(db: Session, name: str, today: date) -> tuple[Case, str]:
         ),
         has_prior_freeze=False,
     )
-    case, token = stage_case(db, payload, narrative=scenario.narrative)
+    case, token = stage_case(db, payload, narrative=scenario.narrative, creator=creator)
     case.is_sample = True
     case.sample_scenario = name
     for doc in scenario.documents:

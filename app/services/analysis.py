@@ -50,7 +50,7 @@ from app.services.requirements import requirements_for
 from app.services.results import save_output
 from app.services.runs import latest_run
 from app.services.safety import find_candidates, find_phrases
-from app.services.usage import count_ai_runs_on
+from app.services.usage import check_run_limit, count_ai_runs_on
 
 logger = logging.getLogger("proofy.analysis")
 
@@ -123,6 +123,8 @@ def start_analysis(
                 "DRAFT_HAS_EDITS",
                 "다시 분석하면 직접 고친 초안이 새 초안으로 바뀝니다.",
             )
+        # 사건당 시간당 한도(T11-b). 하루 한도보다 먼저(대체 결과 실행도 센다)
+        check_run_limit(db, case.id, settings.rate_limit_runs_per_case_hour, utc_now())
         uses_ai = settings.agent_llm == "claude"
         allow_fallback = uses_ai and is_unchanged_sample(case)
         over_limit = uses_ai and count_ai_runs_on(db, today) >= settings.daily_analysis_limit
