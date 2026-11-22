@@ -9,7 +9,7 @@ Proofy 서버: 지급정지된 계좌 명의인(청년)이 은행에 낼 이의�
 - `docs/tasks/README.md`: 전체 작업 흐름과 작업 목록·상태. **작업은 이 목록 단위로 한다**
 - `docs/contract.md`: FE–BE API 계약 **정본**. 구현과 다르면 구현을 고친다. 계약을 바꿀 때는 이 파일을 먼저 고치고 변경 이력에 적는다
 - `docs/screen-flow.md`: 화면(흐름 6개 + 체험 계정 선택·내 사건)과 사용자 흐름
-- `docs/agent-design.md`: AI 에이전트 구조와 판단 근거
+- `docs/agent-design-v2.md`: AI 에이전트 설계 **정본**(4요소·계획 기법·조사 계획·성찰). 가져온 코드와 세부 근거는 `docs/agent-design.md`(v1)
 - `docs/erd.md`: 데이터 모델(ERD) **정본**. 테이블·컬럼을 바꿀 때는 이 파일을 먼저 고친다
 - `docs/erd-review.md`: ERD 초안을 검토하며 내린 결정의 이유
 
