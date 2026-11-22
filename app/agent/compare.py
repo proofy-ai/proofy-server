@@ -20,6 +20,8 @@ import re
 from datetime import date
 from typing import Any
 
+from app.agent.drafting import PROMPT_VERSION as DRAFT_PROMPT_VERSION
+from app.agent.drafting import Drafter
 from app.agent.llm import ClaudeClient, Deadline, limit_items, tool_error, tool_result, user_text
 from app.agent.masking import MaskedText, mask_text, seal_payload
 from app.agent.output import AnalysisOutput, TransactionRow
@@ -233,11 +235,7 @@ class ClaudeAnalyzer:
                 raw = _parse(turn.text())
                 break
         finally:
-            out.model = client.model
-            out.prompt_version = PROMPT_VERSION
-            out.input_tokens = client.usage.all_input_tokens
-            out.output_tokens = client.usage.output_tokens
-            out.cost_micro_usd = client.cost_micro_usd
+            _record_usage(out, client, PROMPT_VERSION)
             logger.info(
                 "대조 %s: 모델 %s, 도구 %d회, 입력 %d·출력 %d 토큰, %d micro USD",
                 ctx.run_id,
@@ -269,10 +267,21 @@ class ClaudeAnalyzer:
                 rec.step("CONFLICT", "자료와 어긋나는 내용", f.note)
 
     def draft(self, ctx: RunContext, rec: Recorder, out: AnalysisOutput) -> None:
-        # 초안은 T17. 그 전까지 비워 둔다(T16 결정 1)
-        rec.step(
-            "DRAFT", "소명서 초안", "초안 작성은 준비 중입니다. 먼저 대조 결과를 확인해 주세요."
-        )
+        """③ 초안과 ④ 후검증(T17, `agent/drafting.py`). 대조와 같은 클라이언트라 비용이 이어진다."""
+        if self._client is None:  # 대조를 건너뛴 경우는 없지만 방어
+            raise AgentError()
+        client = self._client
+        try:
+            Drafter(client).run(ctx, rec, out)
+        finally:
+            _record_usage(out, client, f"{PROMPT_VERSION}/{DRAFT_PROMPT_VERSION}")
+            logger.info(
+                "초안 %s: 누적 입력 %d·출력 %d 토큰, %d micro USD",
+                ctx.run_id,
+                client.usage.all_input_tokens,
+                client.usage.output_tokens,
+                client.cost_micro_usd,
+            )
 
     # 첫 메시지
 
@@ -386,6 +395,14 @@ class ClaudeAnalyzer:
         label = DOC_TYPE_LABELS.get(ref.doc_type, "서류")
         rec.step("TOOL_CALL", f"{label} 글 조회", f"{reason} → {len(regions)}줄")
         return tool_result(tool_use_id, seal_payload({"regions": kept, "notice": _notice(notice)}))
+
+
+def _record_usage(out: AnalysisOutput, client: ClaudeClient, prompt_version: str) -> None:
+    out.model = client.model
+    out.prompt_version = prompt_version
+    out.input_tokens = client.usage.all_input_tokens
+    out.output_tokens = client.usage.output_tokens
+    out.cost_micro_usd = client.cost_micro_usd
 
 
 def _notice(text: str | None) -> MaskedText | None:

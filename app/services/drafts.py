@@ -4,8 +4,11 @@
   1. 연결된 대조 항목 중 `CONFLICT`가 있으면 사유 `CONFLICT`
   2. 문장 속 금액·날짜가 어떤 `CONFLICT` 항목의 진술 값과 같으면 그 항목을 붙이고 1번 적용
   3. 연결된 항목이 없거나 모두 `STATEMENT_ONLY`·`UNKNOWN`이면 사유 `NO_SOURCE`
-  4. 어느 문장에도 연결되지 않은 `CONFLICT` 항목은 `warnings`
-  나머지 사유(인용 못 찾음, 숫자 불일치, 판정 표현, 못 읽은 서류)는 T17 후검증이 붙인다.
+  4. 연결된 항목에 원문에서 못 찾은 인용이 있으면 사유 `QUOTE_NOT_FOUND`(T17)
+  5. 분석기 후검증이 넘긴 사유(`NUMBER_MISMATCH`·`JUDGMENT_EXPRESSION`, T17 `agent/drafting.py`)
+  6. 어느 문장에도 연결되지 않은 `CONFLICT` 항목은 `warnings`
+  사유가 겹치면 계약 `NeedsCheckReason` 순서대로 앞의 것 하나. `SOURCE_UNREAD`는 쓰지 않는다
+  (못 읽은 서류는 근거가 될 수 없다, T16 `agent/verify.py`).
 - `findingIds`에는 같은 실행의 대조 항목만 들어간다. 분석기는 번호로만 가리킨다.
 - 초안은 가장 최근 성공 실행 것만 보여 준다.
 """
@@ -19,6 +22,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.agent.numbers import amounts, month_days
 from app.agent.output import DraftSentence
 from app.errors import ApiError
 from app.models import AnalysisRun, Case, ClaimFinding, Draft
@@ -34,13 +38,8 @@ CONFLICT_NOT_IN_DRAFT = "자료와 어긋난 내용이 초안에 설명되지 �
 NOT_FOUND_MESSAGE = "초안이 없습니다. 분석을 먼저 해 주세요."
 
 _SPACE = re.compile(r"\s+")
-# "15만 원", "12만원", "15만 2000원"
-_MAN_WON = re.compile(r"(\d[\d,]*)\s*만(?:\s*(\d[\d,]*))?\s*원")
-# "150,000원"
-_WON = re.compile(r"(\d[\d,]*)\s*원")
-_MONTH_DAY = re.compile(r"(\d{1,2})\s*월\s*(\d{1,2})\s*일")
-_ISO_DATE = re.compile(r"\d{4}-(\d{1,2})-(\d{1,2})")
-_SLASH_DATE = re.compile(r"(?<!\d)(\d{1,2})/(\d{1,2})(?!\d)")
+# 분석기가 넘길 수 있는 사유(계약 순서상 인용 못 찾음 뒤)
+AGENT_REASONS = ("NUMBER_MISMATCH", "JUDGMENT_EXPRESSION")
 
 
 @dataclass(frozen=True)
@@ -50,29 +49,8 @@ class FindingInfo:
     finding_id: str
     status: str
     conflict: dict[str, Any] | None
-
-
-def _int(text: str) -> int:
-    return int(text.replace(",", ""))
-
-
-def amounts(text: str) -> set[int]:
-    """문장 속 원 단위 금액들."""
-    found = set()
-    for man, rest in _MAN_WON.findall(text):
-        found.add(_int(man) * 10_000 + (_int(rest) if rest else 0))
-    for won in _WON.findall(text):
-        found.add(_int(won))
-    return found
-
-
-def month_days(text: str) -> set[tuple[int, int]]:
-    """문장 속 (월, 일)들."""
-    found = set()
-    for pattern in (_MONTH_DAY, _ISO_DATE, _SLASH_DATE):
-        for month, day in pattern.findall(text):
-            found.add((int(month), int(day)))
-    return found
+    # 근거 인용 중 원문(마스킹본)에서 못 찾은 것이 있나(T17 `QUOTE_NOT_FOUND`)
+    quote_missing: bool = False
 
 
 def mentions_statement(text: str, conflict: dict[str, Any] | None) -> bool:
@@ -87,12 +65,21 @@ def mentions_statement(text: str, conflict: dict[str, Any] | None) -> bool:
     return _SPACE.sub("", statement) in _SPACE.sub("", text)
 
 
-def needs_check(finding_ids: list[str], statuses: dict[str, str]) -> tuple[bool, str | None]:
+def needs_check(
+    finding_ids: list[str],
+    statuses: dict[str, str],
+    quote_missing: set[str] | None = None,
+    agent_reason: str | None = None,
+) -> tuple[bool, str | None]:
     linked = [statuses[f] for f in finding_ids if f in statuses]
     if "CONFLICT" in linked:
         return True, "CONFLICT"
     if not linked or all(s in NO_MATERIAL for s in linked):
         return True, "NO_SOURCE"
+    if quote_missing and any(f in quote_missing for f in finding_ids):
+        return True, "QUOTE_NOT_FOUND"
+    if agent_reason in AGENT_REASONS:
+        return True, agent_reason
     return False, None
 
 
@@ -110,6 +97,7 @@ def replace_draft(
 ) -> None:
     """실행의 초안으로 사건의 초안을 바꾼다(커밋은 부르는 쪽). `version`은 이어서 +1."""
     statuses = {f.finding_id: f.status for f in findings}
+    quote_missing = {f.finding_id for f in findings if f.quote_missing}
     ordered = sorted(sentences, key=lambda s: SECTION_ORDER.index(s.section))
     rows: list[dict[str, Any]] = []
     for sentence in ordered:
@@ -127,7 +115,7 @@ def replace_draft(
             if f.status == "CONFLICT" and f.finding_id not in ids:
                 if mentions_statement(text, f.conflict):
                     ids.append(f.finding_id)
-        flag, reason = needs_check(ids, statuses)
+        flag, reason = needs_check(ids, statuses, quote_missing, sentence.check_reason)
         rows.append(
             {
                 "sentenceId": str(uuid.uuid4()),

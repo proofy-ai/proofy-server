@@ -208,8 +208,10 @@ def test_tool_reason_becomes_tool_call_step_and_usage_is_saved(claude_app, monke
     with client.app.state.session_factory() as db:
         event = db.query(UsageEvent).filter_by(run_id=run["runId"]).one()
         assert event.model == "claude-opus-5-5"
-        assert event.input_tokens == 2000 and event.output_tokens == 200
-        assert event.cost_micro_usd == cost_micro_usd(Usage(2000, 200), "claude-opus-5-5")
+        # 대조 2회 + 초안 1회(T17), 가짜 응답은 회당 입력 1000·출력 100
+        assert event.input_tokens == 3000 and event.output_tokens == 300
+        assert event.cost_micro_usd == cost_micro_usd(Usage(3000, 300), "claude-opus-5-5")
+        assert event.model == "claude-opus-5-5"
 
 
 def test_tool_calls_over_limit_get_error(claude_app, monkeypatch):

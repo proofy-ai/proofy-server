@@ -162,6 +162,11 @@ CODE_KEYS = frozenset(
         "direction",
         "inflowType",
         "fixedChecklist",
+        # 초안(T17): 검증을 거친 enum 값과 코드가 만든 고쳐 쓰기 사유
+        "status",
+        "field",
+        "kind",
+        "problem",
     }
 )
 

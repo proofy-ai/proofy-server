@@ -191,6 +191,11 @@ def _add_finding(
         finding_id,
         status,
         {"field": conflict.field, "statement": conflict.statement} if conflict else None,
+        quote_missing=any(
+            s.quoted_text and not s.is_verified
+            for s in sources
+            if s.source_kind in ("NARRATIVE", "EVIDENCE")
+        ),
     )
 
 
