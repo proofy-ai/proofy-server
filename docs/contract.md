@@ -1,4 +1,4 @@
-# Proofy FE–BE API 계약 v0.8.1(제안)
+# Proofy FE–BE API 계약 v0.8.2(제안)
 
 - 작성일: 2026-11-21(v0.6.5 2026-11-22, v0.7·v0.7.1은 되돌림, v0.8 제안 2026-11-22) · 상태: **v0.8은 제안이다(FE 확인 전). FE 확인 후 "합의됨"으로 바꾼다**
 - v0.8 요약: 결과에 AI 의견·질문 카드(`agentReview`, 4.11), 분석 시작에 질문 답변(`answers`, 4.9), 상담 안내 판단 방식 변경(응답 모양 그대로). 설명용 문서: `docs/proposals/v0.8-agent-interview.md`
@@ -71,7 +71,7 @@
 | 413 | `FILE_TOO_LARGE` | 10MB 초과 | 안내 |
 | 415 | `UNSUPPORTED_FILE_TYPE` | JPG·PNG·PDF 외(파일 내용으로 판별) | 안내 |
 | 422 | `ANALYSIS_PRECONDITION` | 사연 20자 미만 또는 거래내역서 없음. `details.missing`에 `NARRATIVE`·`TRANSACTION_RECORD` | 3번 화면에 머물고 빠진 항목 강조 |
-| 429 | `RATE_LIMITED` | 같은 IP에서 사건 생성 시간당 20회 초과, 또는 사건당 분석 시간당 5회 초과 | 안내 |
+| 429 | `RATE_LIMITED` | 같은 IP에서 사건 생성 시간당 100회 초과, 또는 사건당 분석 시간당 5회 초과 | 안내 |
 | 429 | `DAILY_LIMIT` | 서비스 전체 AI 분석 하루(한국 날짜) 300회 초과(비용 보호). **샘플 사건은 이 오류 대신 미리 만든 결과로 끝난다(4.10)** | "오늘 시연 한도를 다 썼어요" 안내 |
 | 500 | `INTERNAL` | 서버 오류 | 재시도 버튼 |
 
@@ -236,7 +236,7 @@
 | `inflow.occurredAt` | 아니오 | 날짜(`"2026-11-08"`) 또는 `null`. 미래면 400 |
 | `hasPriorFreeze` | 예(값으로 `null` 허용) | 예 `true` / 아니오 `false` / 모름 `null` |
 
-같은 IP에서 시간당 20회까지(`429 RATE_LIMITED`). 샘플 사건 생성(4.3.1)도 함께 센다.
+같은 IP에서 시간당 100회까지(`429 RATE_LIMITED`). 샘플 사건 생성(4.3.1)도 함께 센다.
 
 응답 `201` — `caseToken`은 **이 응답에서 한 번만** 준다. FE는 바로 localStorage에 저장한다.
 
@@ -791,6 +791,7 @@ FE는 1.5초마다 부르고 `status`가 `RUNNING`이 아니면 멈춘다. 180�
 
 | 날짜 | 버전 | 내용 |
 |---|---|---|
+| 2026-11-22 | 0.8.2 | 같은 IP 사건 생성 한도를 시간당 20회 → 100회로(1.1 429, 4.3). 심사장·리허설에서 같은 와이파이로 체험 사건을 많이 만들기 때문. 응답 모양 그대로, FE 변경 없음 |
 | 2026-11-22 | 0.8.1(제안) | 6절 "별지 제4호 인쇄": 현행 서식(2026.9.29 개정) 칸별로 누가 채우는지, 이의제기 사유 칸 = `fullText` + FE가 붙이는 "첨부 자료" 한 줄(올린 증빙 `docType` 이름 ∪ `checked` 항목 `label`), 넘치면 다음 쪽, 인쇄 전 확인창. **서버 API 변경 없음(FE 규칙만)** |
 | 2026-11-22 | 0.8(제안) | 인터뷰형 에이전트(`docs/proposals/v0.8-agent-interview.md`). ① 4.11 결과에 `agentReview`(조건부 AI 의견 `opinions`, 근거 조항 `lawRefs`, 질문 `questions`, 이전 답 `answered`), 2절 `LawSource` ② 4.9 분석 시작에 `answers`(질문 답변, 답이 있으면 `inputVersion` +1, 잘못된 `questionId`는 400) ③ 상담 안내: 표현 목록이 찾은 부분을 에이전트가 문맥으로 확인해 정함, `matchedPhrases`는 서버가 확인한 원문 인용, 상담 안내 결과에도 질문이 있어 답하고 다시 분석 가능, 하루 한도에 셈. `referral` 응답 모양은 그대로 ④ 4.10 법령 조회도 `TOOL_CALL` ⑤ 3절 5번 화면: 탭 위(상담 안내 때는 상담 카드 아래)에 AI 의견·질문 카드. **필드 추가뿐이라 v0.6.5 FE가 그대로 동작한다.** FE 할 일: 카드 1개 새로, `ResultView`·`useAnalysisRetry`·`types/api.ts` 수정 |
 | 2026-11-21 | 0.1 | 최초 작성 |

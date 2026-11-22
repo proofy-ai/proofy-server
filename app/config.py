@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     # 서비스 전체 하루 AI 분석 한도(계약 1.1·4.1). 넘으면 429, 샘플 그대로는 미리 만든 결과(T11-a)
     daily_analysis_limit: int = 300
     # 시간당 한도(계약 1.1·4.3·4.10, T11-b). 넘으면 429 RATE_LIMITED
-    rate_limit_cases_per_ip_hour: int = 20
+    rate_limit_cases_per_ip_hour: int = 100
     rate_limit_runs_per_case_hour: int = 5
     # IP 해시 비밀값. 비우면 서버가 켜질 때 임의 값을 만든다(재시작하면 지난 기록과 안 이어짐)
     ip_hash_secret: str | None = None

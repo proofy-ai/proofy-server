@@ -169,7 +169,7 @@ uv run ruff check .
 - **`AGENT_LLM`** (기본 `scripted`): `scripted`는 가짜 분석, `claude`는 실제 분석
 - **`ANTHROPIC_API_KEY`**: `AGENT_LLM=claude`일 때만 필요
 - **`DEMO_MODE`** (기본 `true`): 시연용 안내 표시
-- **한도:** `DAILY_ANALYSIS_LIMIT`(하루 분석, 300), `RATE_LIMIT_CASES_PER_IP_HOUR`(IP당 사건 생성, 시간당 20), `RATE_LIMIT_RUNS_PER_CASE_HOUR`(사건당 분석, 시간당 5)
+- **한도:** `DAILY_ANALYSIS_LIMIT`(하루 분석, 300), `RATE_LIMIT_CASES_PER_IP_HOUR`(IP당 사건 생성, 시간당 100), `RATE_LIMIT_RUNS_PER_CASE_HOUR`(사건당 분석, 시간당 5)
 - **자동 삭제:** `CLEANUP_INTERVAL_SECONDS`(만료 사건 정리 주기, 600초), `IP_HASH_SECRET`(IP 해시 비밀값, 비우면 임의 값)
 - **글자 인식:** `TESSERACT_CMD`·`PDFTOPPM_CMD`(비우면 PATH에서 찾음), `OCR_LANG`(기본 `kor+eng`, 한글 데이터 `tesseract-ocr-kor` 필요)
 

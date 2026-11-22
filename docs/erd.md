@@ -415,7 +415,7 @@ AI 권장 항목은 한 실행당 최대 3개다. 충족 여부는 `accepted_doc
 | `created_at` | TIMESTAMP(UTC) | 필수 | |
 
 **한도 계산**(값은 환경변수로 바꿀 수 있다, 계약 1.1):
-- IP당 사건 생성: 같은 `ip_hash`의 `CASE_CREATE`가 최근 1시간에 `RATE_LIMIT_CASES_PER_IP_HOUR`(기본 20)개 이상이면 429 `RATE_LIMITED`
+- IP당 사건 생성: 같은 `ip_hash`의 `CASE_CREATE`가 최근 1시간에 `RATE_LIMIT_CASES_PER_IP_HOUR`(기본 100)개 이상이면 429 `RATE_LIMITED`
 - 사건당 분석: 같은 `case_id`의 `ANALYSIS_RUN`이 최근 1시간에 `RATE_LIMIT_RUNS_PER_CASE_HOUR`(기본 5)개 이상이면 429 `RATE_LIMITED`
 - 하루 분석: 오늘(한국 날짜 0시부터) `ai_called = true`인 `ANALYSIS_RUN`이 `DAILY_ANALYSIS_LIMIT`(기본 300)개 이상이면 429 `DAILY_LIMIT`. 이 값과 사용량은 `GET /health`의 `dailyUsage`로 보인다
 
