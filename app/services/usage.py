@@ -1,6 +1,6 @@
 """사용량 집계(`docs/erd.md` 3.10). 기록은 사건과 따로 있어 사건을 지워도 줄지 않는다.
 
-지금은 `GET /health`의 `dailyUsage` 표시만 한다. 한도로 막는 것(429)은 T11에서 한다.
+`GET /health`의 `dailyUsage` 표시와 분석 시작 때 하루 한도 검사(429 `DAILY_LIMIT`, T11-a)에 쓴다.
 """
 
 from datetime import date, datetime, time, timedelta

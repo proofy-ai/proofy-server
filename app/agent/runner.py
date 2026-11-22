@@ -8,6 +8,9 @@
 실제로 읽는다(가짜 분석은 정해 둔 결과라 읽지 않음, T13 결정 ①). 파일 읽기와 추출 결과 저장은
 넘겨받은 증빙 저장소(`EvidenceStore`)로만 한다.
 
+샘플 그대로인 사건은 AI가 실패하거나 하루 한도를 넘으면 미리 만든 결과로 끝낸다(T11, 계약 4.10).
+미리 만든 결과는 가짜 분석기의 고정값이고 `execute_fallback`이 만든다.
+
 ① 단계 분석기 전에 읽은 서류 줄과 사연을 가린다(T14, `app.agent.masking`). 가짜 분석에서도 사연은
 가린다. AI는 가린 글만 본다(원칙 4). 그다음 거래내역서 줄에서 거래 행을 코드 규칙으로 뽑는다(T15).
 """
@@ -27,7 +30,15 @@ from app.agent.masking import (
     mask_text,
 )
 from app.agent.output import AnalysisOutput
-from app.agent.steps import STAGES, AgentError, AgentTimeout, Recorder
+from app.agent.steps import (
+    STAGES,
+    AgentError,
+    AgentTimeout,
+    Recorder,
+    Stage,
+    StepStatus,
+    StepType,
+)
 from app.agent.transactions import parse_rows
 
 
@@ -66,6 +77,8 @@ class RunContext:
     anthropic_api_key: str | None = None
     anthropic_model: str = "claude-opus-5-5"
     anthropic_effort: str = "low"
+    # 샘플 그대로인 사건(T11). AI가 실패하면 미리 만든 결과로 끝낸다(계약 4.10)
+    allow_fallback: bool = False
 
     def check_deadline(self) -> None:
         if time.monotonic() > self.deadline:
@@ -205,4 +218,52 @@ def execute(ctx: RunContext, rec: Recorder, store: EvidenceStore | None = None) 
         # 실패한 실행도 외부 AI 비용(`out.model`·토큰)을 남길 수 있게 출력을 붙인다
         exc.output = out  # type: ignore[attr-defined]
         raise
+    return out
+
+
+FALLBACK_TITLE = "미리 만든 결과 사용"
+FALLBACK_SUMMARY = "지금은 AI 분석을 쓸 수 없어 샘플용으로 미리 만든 결과를 보여 드립니다."
+
+
+class _SilentRecorder:
+    """가짜 분석기의 step을 버린다. 미리 만든 결과가 AI가 한 일처럼 보이지 않게."""
+
+    def stage(self, stage: Stage) -> None:
+        pass
+
+    def step(
+        self, type: StepType, title: str, summary: str | None, status: StepStatus = "DONE"
+    ) -> None:
+        pass
+
+
+def execute_fallback(
+    ctx: RunContext, rec: Recorder, failed: AnalysisOutput | None = None
+) -> AnalysisOutput:
+    """샘플 사건의 미리 만든 결과(T11, 계약 4.10). 가짜 분석기의 고정값을 쉬지 않고 만든다.
+
+    실패한 실행에서 코드가 만든 것(가린 사연·읽은 글자·거래 행)과 외부 AI 비용 기록은 이어받고,
+    AI가 만들다 만 대조·의견은 버린다. step은 `FALLBACK` 한 줄만 남긴다.
+    """
+    from app.agent.scripted import ScriptedAnalyzer
+
+    out = AnalysisOutput()
+    if failed is not None:
+        out.masked_narrative = failed.masked_narrative
+        out.extractions = dict(failed.extractions)
+        out.transactions = list(failed.transactions)
+        out.model = failed.model
+        out.prompt_version = failed.prompt_version
+        out.input_tokens = failed.input_tokens
+        out.output_tokens = failed.output_tokens
+        out.cost_micro_usd = failed.cost_micro_usd
+    if out.masked_narrative is None:
+        _mask_inputs(ctx, out, None)
+    quick = replace(ctx, stage_delay_seconds=0)
+    analyzer = ScriptedAnalyzer()
+    silent = _SilentRecorder()
+    analyzer.extract(quick, silent, out)
+    analyzer.compare(quick, silent, out)
+    analyzer.draft(quick, silent, out)
+    rec.step("FALLBACK", FALLBACK_TITLE, FALLBACK_SUMMARY)
     return out

@@ -6,6 +6,7 @@
 import time
 
 import fake_claude
+import flow
 import pytest
 
 from app.agent.compare import MAX_TOOL_CALLS, OUTPUT_SCHEMA, TOOLS
@@ -239,7 +240,9 @@ def test_refusal_fails_run_and_still_records_cost(claude_app, monkeypatch):
     client = claude_app
     case_id, auth = _sample(client)
     fake_claude.install(monkeypatch, [fake_claude.refusal()])
-    run = _run(client, case_id, auth)
+    # 샘플 그대로면 미리 만든 결과로 끝나므로(T11) 사연을 고친 사건으로 실패를 본다
+    narrative = "거래처에 가죽 지갑을 납품하고 11월 8일 대금 15만 원을 받았습니다. 고친 사연입니다."
+    run = flow.run(client, case_id, auth, {"narrative": narrative})
     assert run["status"] == "FAILED"
     assert run["error"]["code"] == "AGENT_REFUSED"
     with client.app.state.session_factory() as db:
