@@ -1,6 +1,6 @@
 # T10 상담 안내 + 판정 필드 부재
 
-- 단계: 2단계 가짜 분석 · 예정: 11/22 오후 · 상태: PR · 이슈: #12 · PR: 열림
+- 단계: 2단계 가짜 분석 · 예정: 11/22 오후 · 상태: 완료(후속 #69) · 이슈: #12 · PR: #68
 
 ## 범위
 
@@ -61,6 +61,7 @@
   - 확인 로직은 `app/agent/consult.py`(계획의 `verify.py` 대신 새 파일. 가짜 분석도 같이 써서)
   - T10-e: `acceptedDocTypes`(계약의 받는 서류 종류 칸)는 `accept`가 들어가지만 판정과 무관해 예외로 둠
   - 프롬프트 버전: 대조 `t10-v1`(초안은 `t25-v1` 그대로)
+- 11/22 사용자 결정(PR #68 리뷰 중): **코드는 후보만 찾고 판단하지 않는다.** 실제 분석은 부정문까지 포함한 후보 전부(`find_candidates`)를 에이전트 `checkPhrases`로 넘기고 문맥 판단은 AI가 한다. 부정문을 뺀 목록(`find_phrases`)은 AI가 없는 곳(가짜 분석·미리 만든 결과)과 AI가 권했지만 인용이 원문에 없을 때 대신 보여 줄 표현에만 쓴다. AI가 권하지 않으면 step `SAFETY`에 AI가 본 후보를 적는다
 
 ## 결과
 
@@ -72,5 +73,4 @@
 - `uv run python -m pytest -q` 197 passed·2 skipped, `uv run ruff check .` 통과(11/22)
 - 로컬 실서버(가짜 분석, 비용 0): 일반 분석 뒤 초안 200 → 통장 대여 사연으로 다시 분석하면 step `SAFETY`, `referral`(`통장을 빌려`, 132·1332), 대조·초안 비움, 질문 1개, `GET /draft` 404 → 사연을 고치고 질문에 답해 다시 분석하면 상담 안내 풀림·초안 생김·`answered` 1개
 - 미검증: 실제 Claude의 문맥 판단(새 프롬프트 `t10-v1`은 가짜 SDK로만 확인), 배포 서버
-
-
+- 후속 #69(브랜치 `fix/69-safety-candidates`): 코드는 후보만 찾고 판단은 AI가(위 "결정" 11/22). `find_candidates`, `RunContext.safety_candidates`, 대조 프롬프트 `checkPhrases` 설명 보강, 테스트 3개 추가. `uv run python -m pytest -q` 200 passed·2 skipped, ruff 통과

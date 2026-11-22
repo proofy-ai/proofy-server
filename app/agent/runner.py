@@ -111,7 +111,10 @@ class RunContext:
     answers: tuple[AnswerPair, ...] = ()
     # 지난 성공 분석(T25). 첫 분석이면 None
     previous: PreviousRun | None = None
-    # 표현 목록이 사연·답 원문에서 찾은 상담 안내 표현(T10, 서비스 계층이 찾음)
+    # 상담 안내 표현(T10, 서비스 계층이 사연·답 원문에서 찾음). 코드는 후보만 찾고 판단하지 않는다
+    # 부정문까지 포함한 후보 전부. 에이전트에 `checkPhrases`로 넘겨 문맥으로 판단하게 한다
+    safety_candidates: tuple[str, ...] = ()
+    # 부정문을 뺀 표현. AI가 없는 곳(가짜 분석·미리 만든 결과)의 결정과, AI 인용이 원문에 없을 때만
     safety_hits: tuple[str, ...] = ()
 
     def check_deadline(self) -> None:
@@ -203,7 +206,7 @@ def _mask_inputs(ctx: RunContext, out: AnalysisOutput, store: EvidenceStore | No
         MaskedAnswer(mask_text(p.question, names), mask_text(p.answer, names)) for p in ctx.answers
     ]
     out.masked_previous = _mask_previous(ctx.previous, names)
-    out.masked_check_phrases = [mask_text(p, names) for p in ctx.safety_hits]
+    out.masked_check_phrases = [mask_text(p, names) for p in ctx.safety_candidates]
 
 
 def _mask_previous(previous: PreviousRun | None, names: set[str]) -> dict[str, Any] | None:

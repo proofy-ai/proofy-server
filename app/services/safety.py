@@ -1,8 +1,11 @@
 """상담 안내 표현 찾기(T10, 계약 4.9·4.11, agent-design 2.1 ⓪ SAFETY).
 
-사연과 답 **원문**에서 정해 둔 표현을 코드로 찾는다. 찾은 표현은 runner가 가린 뒤 에이전트에
-"확인할 표현"으로 넘기고, 실제 분석은 에이전트가 문맥을 읽어 상담을 권할지 정한다. 가짜 분석·
-미리 만든 결과는 이 목록만으로 정한다.
+사연과 답 **원문**에서 정해 둔 표현을 코드로 찾는다. 코드는 후보만 찾고 판단하지 않는다(11/22 결정).
+
+- 실제 분석: 부정문까지 포함한 후보 전부(`find_candidates`)를 runner가 가려 에이전트에 "확인할
+  표현"으로 넘기고, 에이전트가 문맥을 읽어 상담을 권할지 정한다.
+- 부정문을 뺀 목록(`find_phrases`)은 AI가 없는 곳에서만 쓴다: 가짜 분석·미리 만든 결과의 결정,
+  AI가 권했지만 인용이 원문에 없을 때 대신 보여 줄 표현.
 
 이 안내는 사람이나 사건을 판정하는 것이 아니라, 이의제기 전에 상담이 먼저 필요해 보이는 표현이
 있음을 알리는 것이다(계약 4.11).
@@ -48,21 +51,30 @@ NEGATION_WINDOW = 15
 
 
 def find_phrases(texts: Iterable[str]) -> list[str]:
-    """사연·답 원문에서 걸린 표현(글자 그대로), 나온 순서, 중복 없이."""
+    """부정문을 뺀 표현(글자 그대로), 나온 순서, 중복 없이. AI가 없는 곳에서만 쓴다."""
+    return _collect(texts, skip_negated=True)
+
+
+def find_candidates(texts: Iterable[str]) -> list[str]:
+    """부정문까지 포함한 후보 전부. 실제 분석에서 에이전트에 넘겨 문맥으로 판단하게 한다."""
+    return _collect(texts, skip_negated=False)
+
+
+def _collect(texts: Iterable[str], skip_negated: bool) -> list[str]:
     found: list[str] = []
     for text in texts:
-        for _, phrase in _matches(text or ""):
+        for _, phrase in _matches(text or "", skip_negated):
             if phrase not in found:
                 found.append(phrase)
     return found
 
 
-def _matches(text: str) -> list[tuple[int, str]]:
+def _matches(text: str, skip_negated: bool) -> list[tuple[int, str]]:
     hits: list[tuple[int, str]] = []
     for pattern in _PATTERNS:
         for m in pattern.finditer(text):
             after = text[m.end() : m.end() + NEGATION_WINDOW]
-            if _NEGATION.search(after):
+            if skip_negated and _NEGATION.search(after):
                 continue
             hits.append((m.start(), m.group(0).strip()))
     return sorted(hits)
