@@ -176,8 +176,12 @@ class ClaudeClient:
         tools: list[dict[str, Any]],
         schema: dict[str, Any],
         messages: list[dict[str, Any]],
+        max_tokens: int = MAX_OUTPUT_TOKENS,
     ) -> Turn:
-        """요청 한 번. 거절·출력 한도 초과는 `AgentRefused`, 마감은 `AgentTimeout`."""
+        """요청 한 번. 거절·출력 한도 초과는 `AgentRefused`, 마감은 `AgentTimeout`.
+
+        `max_tokens`는 스키마 확인 스크립트(`scripts/check_claude_schema.py`)만 줄여 쓴다.
+        """
         fallback: dict[str, Any] = (
             {}
             if self._model.startswith(NO_FALLBACK_PREFIXES)
@@ -185,7 +189,7 @@ class ClaudeClient:
         )
         response = self._create(
             model=self._model,
-            max_tokens=MAX_OUTPUT_TOKENS,
+            max_tokens=max_tokens,
             # 최상위 자동 캐시: 도구 루프의 앞 턴 이력을 다음 턴에 캐시 읽기로 센다
             cache_control={"type": "ephemeral"},
             system=system,
@@ -225,7 +229,10 @@ class ClaudeClient:
                 return self._client.beta.messages.create(timeout=timeout, **kwargs)
             except anthropic.APIStatusError as exc:
                 if exc.status_code not in RETRY_STATUSES or attempt == MAX_ATTEMPTS:
-                    logger.warning("Claude 요청 실패: %s", exc.status_code)
+                    # 오류 문구에는 키·사용자 글이 없다. 400 원인(스키마 한도 등)을 남긴다
+                    logger.warning(
+                        "Claude 요청 실패: %s %s", exc.status_code, str(exc.message)[:300]
+                    )
                     raise AgentError() from exc
                 wait = _retry_after(exc) or min(2.0**attempt, 20.0)
             except anthropic.APIConnectionError as exc:  # 시간 초과 포함

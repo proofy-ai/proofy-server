@@ -9,7 +9,7 @@ import fake_claude
 import flow
 import pytest
 
-from app.agent.compare import MAX_TOOL_CALLS, OUTPUT_SCHEMA, TOOLS
+from app.agent.compare import MAX_TOOL_CALLS, OUTPUT_SCHEMA, STRICT_TOOLS, TOOLS
 from app.agent.extract import Extraction
 from app.agent.llm import ClaudeClient, Deadline, Usage, cost_micro_usd, user_text
 from app.agent.masking import mask_text, seal_payload
@@ -309,4 +309,10 @@ def test_tools_require_reason():
     # 조사 계획(T24)은 조회가 아니라 이유 대신 계획 항목을 받는다
     for tool in (t for t in TOOLS if t["name"] != "make_plan"):
         assert "reason" in tool["input_schema"]["required"]
-        assert tool["strict"] is True
+
+
+def test_only_law_tools_are_strict():
+    # 이슈 #71: strict 도구와 출력 스키마를 합친 문법이 API 한도를 넘으면 모든 요청이 400.
+    # "값 또는 null" 칸이 있는 도구는 strict를 끈다(입력은 코드가 검사)
+    strict = {t["name"] for t in TOOLS if t.get("strict") is True}
+    assert strict == STRICT_TOOLS == {"search_law", "get_law_article"}

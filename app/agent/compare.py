@@ -81,6 +81,14 @@ _REASON = {
     ),
 }
 
+# 엄격 모드(strict)는 법령 도구 2개만 켠다(이슈 #71). 출력 스키마(OUTPUT_SCHEMA)와 strict 도구를
+# 합친 문법이 API 내부 한도를 넘으면 요청이 400("compiled grammar is too large")으로 거부된다.
+# 출력 스키마가 이미 한도에 가까워, "값 또는 null" 칸이 있는 도구(계획·거래 조회·서류 줄)는
+# strict를 끄고 입력은 코드가 검사한다(틀리면 tool_error로 AI에 돌려줌).
+# 판정 칸 차단은 출력 스키마가 보장한다.
+# 스키마를 바꾸면 `uv run python -m scripts.check_claude_schema`로 실제 API가 받는지 확인한다.
+STRICT_TOOLS = frozenset({"search_law", "get_law_article"})
+
 TOOLS: list[dict[str, Any]] = [
     {
         "name": "make_plan",
@@ -90,7 +98,7 @@ TOOLS: list[dict[str, Any]] = [
             "조사 중 계획을 바꿔야 하면 한 번 더 부를 수 있다. "
             "조회 횟수 한도에 세지 않는다."
         ),
-        "strict": True,
+        "strict": False,
         "input_schema": _object(
             {
                 "items": {
@@ -127,7 +135,7 @@ TOOLS: list[dict[str, Any]] = [
             "이 사건 거래내역서에서 뽑은 거래 행을 조건으로 조회한다. "
             "조건을 비우면(null) 그 조건 없이 찾는다. 거래상대 이름은 가려져 있다(예: 김*수)."
         ),
-        "strict": True,
+        "strict": False,
         "input_schema": _object(
             {
                 "reason": _REASON,
@@ -146,7 +154,7 @@ TOOLS: list[dict[str, Any]] = [
             "이 사건에 올린 서류 하나의 글자 줄을 조회한다. 개인정보는 가려져 있다. "
             "page를 null로 두면 모든 쪽."
         ),
-        "strict": True,
+        "strict": False,
         "input_schema": _object(
             {
                 "reason": _REASON,
