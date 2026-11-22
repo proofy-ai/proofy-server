@@ -22,13 +22,29 @@ proofy-server/
 └─ Dockerfile     배포 이미지(파이썬 + Tesseract 한국어 + poppler)
 ```
 
-### 호출 방향
+### 🔗 모듈 의존 방향
 
-```text
-api ──→ services ──→ models   (DB 표)
- │          │
- │          └──→ agent        (AI 분석)
- └──→ schemas ←── services    (요청·응답 모양)
+화살표는 "import한다(부른다)"는 뜻이다. 실제 코드의 import를 세어 그렸다. 점선은 서버 밖으로 나가는 호출이다.
+
+```mermaid
+flowchart TD
+    FE["FE 웹앱<br/>(Cloudflare)"]
+    api["api<br/>HTTP 라우터"]
+    schemas["schemas<br/>요청·응답 모양"]
+    services["services<br/>업무 로직"]
+    agent["agent<br/>AI 분석"]
+    models["models<br/>DB 표"]
+    DB[("DB<br/>SQLite · Postgres")]
+    Claude["Claude API"]
+
+    FE -. "HTTP /api/v1" .-> api
+    api --> services
+    api --> schemas
+    services --> schemas
+    services --> models
+    services -- "runner.py 하나로" --> agent
+    models --> DB
+    agent -. "llm.py 하나로 · 가린 글만" .-> Claude
 ```
 
 - **한쪽으로만 흐른다.** `api → services → models`. 라우터는 DB를 직접 만지지 않는다
@@ -146,6 +162,39 @@ api ──→ services ──→ models   (DB 표)
 ---
 
 ## 🎬 장면으로 보기: test01에서 "분석 시작"을 누르면
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant FE as FE 웹앱
+    participant API as api/analysis.py
+    participant SVC as services
+    participant RUN as agent/runner.py
+    participant AG as agent 분석기
+    participant CL as Claude API
+    participant DB
+
+    FE->>API: POST /cases/{id}/analysis-runs
+    API->>SVC: 분석 시작(analysis.py)
+    SVC->>DB: 토큰·한도 확인, 실행 행 만들기
+    SVC-->>FE: 202 (runId)
+    SVC->>RUN: 서버 안 스레드에서 실행
+    RUN->>RUN: ① 글자 읽기 · 가리기 · 거래 행
+    RUN->>AG: ② 대조(compare.py)
+    loop 도구 루프(최대 12회)
+        AG->>CL: 가린 글 + 도구(llm.py)
+        CL-->>AG: 계획 · 조회 요청 · 대조 · 의견 · 질문
+    end
+    AG->>AG: 근거 검증(verify.py)
+    RUN->>AG: ③ 초안 · ④ 검증(drafting.py)
+    RUN->>SVC: 단계마다 진행 줄(넘겨받은 기록기)
+    SVC->>DB: 바로 커밋
+    FE->>API: GET …/analysis-runs/{runId}
+    API-->>FE: 진행 줄(4번 화면)
+    SVC->>DB: 같은 사건 근거만 저장(results·review·drafts)
+    FE->>API: GET /result
+    API-->>FE: D-day 다시 계산한 결과(5번 화면)
+```
 
 1. **`api/analysis.py`** 가 `POST /cases/{id}/analysis-runs`를 받아 `services/analysis.py`에 넘긴다
 2. **`services/analysis.py`**
