@@ -1,6 +1,7 @@
-# Proofy FE–BE API 계약 v0.6.5
+# Proofy FE–BE API 계약 v0.8(제안)
 
-- 작성일: 2026-11-21(v0.6.5 2026-11-22, v0.7·v0.7.1은 되돌림) · 상태: **BE 결정 반영, FE 확인 후 "합의됨"으로 바꾼다**
+- 작성일: 2026-11-21(v0.6.5 2026-11-22, v0.7·v0.7.1은 되돌림, v0.8 제안 2026-11-22) · 상태: **v0.8은 제안이다(FE 확인 전). FE 확인 후 "합의됨"으로 바꾼다**
+- v0.8 요약: 결과에 AI 의견·질문 카드(`agentReview`, 4.11), 분석 시작에 질문 답변(`answers`, 4.9), 상담 안내 판단 방식 변경(응답 모양 그대로). 설명용 문서: `docs/proposals/v0.8-agent-interview.md`
 - 화면 기준: `docs/screen-flow.md`(흐름 화면 6개 + 체험 계정 선택·내 사건) · 데이터 기준: `docs/erd.md` · AI 흐름: `docs/agent-design.md`
 - 서버 실행 중 실제 스키마는 `GET /docs`(FastAPI OpenAPI)에서 확인한다. **이 문서와 OpenAPI가 다르면 이 문서가 정본**이고, 서버를 고친다.
 
@@ -31,7 +32,7 @@
 | CORS | 서버가 FE 고정 배포 주소(Cloudflare)와 `http://localhost:5173`을 허용하고, 허용 헤더에 `Content-Type`, `X-Case-Token`을 넣는다. 배포마다 바뀌는 미리보기 주소는 등록하지 않는다. 주소는 서버 환경변수 `CORS_ORIGINS`로 넣으며, 추가 주소는 BE에 알려 줄 것 |
 | ID | 전부 UUID 문자열 |
 | 빈 값 | 값이 없으면 키를 빼지 않고 `null` |
-| 개인정보 | 서버가 보장한다: ① 업로드 원본 이미지·PDF는 외부 AI로 보내지 않는다 ② 서버에서 읽은 글자와 사연은 주민등록번호·계좌번호·전화번호·이름을 가린 뒤에만 AI에 보낸다 ③ 신분증과 신청인 인적사항은 받지 않는다 ④ 사건은 24시간 뒤 자동 삭제. 이 서비스는 **시연용이므로 합성 서류만** 올리게 안내한다(6절) |
+| 개인정보 | 서버가 보장한다: ① 업로드 원본 이미지·PDF는 외부 AI로 보내지 않는다 ② 서버에서 읽은 글자, 사연, 질문 답변은 주민등록번호·계좌번호·전화번호·이름을 가린 뒤에만 AI에 보낸다 ③ 신분증과 신청인 인적사항은 받지 않는다 ④ 사건은 24시간 뒤 자동 삭제. 이 서비스는 **시연용이므로 합성 서류만** 올리게 안내한다(6절) |
 
 ### 1.1 오류 응답
 
@@ -84,6 +85,7 @@
 | `ChecklistStatus` | `SATISFIED` 올림 · `MISSING` 없음 · `NOT_COLLECTED` 받지 않음(직접 첨부) · `GUIDE_ONLY` 은행에서 작성 | |
 | `DraftSection` | `DEPOSIT_REASON` 입금 경위 · `NO_INVOLVEMENT` 범죄에 가담하지 않았다는 설명 · `VICTIM_CONTEXT` 피해를 입은 경위 | 탭 C 초안의 묶음 제목. 소명 자료 3분류를 따른다(`docs/agent-design.md` 1절) |
 | `NeedsCheckReason` | `CONFLICT` 자료와 어긋난 내용 · `NO_SOURCE` 근거 없음 · `QUOTE_NOT_FOUND` 인용을 원문에서 못 찾음 · `NUMBER_MISMATCH` 숫자가 근거와 다름 · `JUDGMENT_EXPRESSION` 판정처럼 읽히는 표현 · `SOURCE_UNREAD` 근거 서류를 못 읽음 | 탭 C "확인 필요" 툴팁. 여러 사유가 겹치면 이 순서대로 앞의 것 하나만 준다 |
+| `LawSource` | `LAW` 통신사기피해환급법 · `DECREE` 같은 법 시행령 · `FORM4` 시행령 별지 제4호 이의제기신청서 | AI 의견·질문의 근거 조항 칩(4.11 `agentReview`). 화면에는 `label`을 그대로 쓴다 |
 | `DeadlineState` | `UNKNOWN_NOTICE_DATE` 공고일 확인 필요 · `OK` · `URGENT` 7일 이하 · `EXPIRED` 지남 | D-day 배지 색 |
 | `SampleScenario` | `GOODS` 물품 거래(청년 1인 온라인 판매 사업자, 체험 계정 test01) · `UNEXPECTED` 모르는 입금(통장 묶기, test02) · `SALARY` 급여(P1, 체험 계정 없음) | 샘플 체험 |
 
@@ -97,7 +99,7 @@
 | 2 내 상황 | "다음": `POST /cases`(처음) 또는 `PATCH /cases/{id}`(수정). 응답의 `deadline`으로 D-day 표시 |
 | 3 사연·증빙 | `GET /meta/requirements?inflowType=` 또는 `GET /cases/{id}/checklist` · `PATCH /cases/{id}`(사연, 입력 멈춘 뒤 1초 자동 저장) · `POST/DELETE /cases/{id}/evidence` · `GET /samples`(샘플 서류 내려받기 링크) · "분석 시작": `POST /cases/{id}/analysis-runs`에 **현재 사연을 `narrative`로 함께 보낸다**. 사연 20자 미만이거나 `requiredForAnalysis` 항목이 `SATISFIED`가 아니면 버튼을 비활성화하고 이유를 보여 준다(서버도 422로 막는다) |
 | 4 분석 중 | `GET /cases/{id}/analysis-runs/{runId}` 1.5초 간격 폴링 |
-| 5 결과 | `GET /cases/{id}/result` · `PATCH /cases/{id}/checklist/{itemId}` · `PUT /cases/{id}/draft`. **`result.referral`이 있으면 탭 A~C 대신 상담 안내 카드만 보여 주고 6번으로 가는 버튼을 숨긴다(4.11)** |
+| 5 결과 | `GET /cases/{id}/result` · `PATCH /cases/{id}/checklist/{itemId}` · `PUT /cases/{id}/draft`. 머리말·배너 아래, 탭 위에 **AI 의견·질문 카드**(`result.agentReview`, `null`이면 숨김). 카드의 "답하고 다시 분석": `POST /cases/{id}/analysis-runs`에 `answers`를 실어 보내고 4번 화면으로(지금의 다시 분석과 같은 흐름, 4.9). **`result.referral`이 있으면 탭 A~C 대신 상담 안내 카드와 그 아래 AI 의견·질문 카드를 보여 주고 6번으로 가는 버튼을 숨긴다(4.11)** |
 | 6 제출 가이드 | 서버 호출 없음(정적 문구). 최종 점검 수치는 5번에서 받은 `result.summary`와 `draft.unconfirmedCount` 사용 · "이 사건 지우기": `DELETE /cases/{id}` 후 localStorage 목록에서 제거 |
 
 ## 4. 엔드포인트
@@ -412,15 +414,27 @@
 ### 4.9 분석 시작 — `POST /cases/{caseId}/analysis-runs`
 
 ```json
-{ "narrative": "온라인 쇼핑몰을 운영하는 개인사업자입니다. …", "overwriteEditedDraft": false }
+{
+  "narrative": "온라인 쇼핑몰을 운영하는 개인사업자입니다. …",
+  "overwriteEditedDraft": false,
+  "answers": [
+    { "questionId": "q1…", "answer": "다음 날 1개를 더 주문받아 4개 15만 원이 됐어요." }
+  ]
+}
 ```
 
 - `narrative`(선택): 있으면 서버가 **먼저 저장한 뒤** 사전 조건을 검사하고 분석을 시작한다. 자동 저장(1초 지연)이 끝나기 전에 버튼을 눌러도 최신 사연으로 분석되게 FE는 항상 보낸다. 저장된 사연과 같으면 아무것도 바꾸지 않고 `inputVersion`도 그대로다(4.5와 같은 규칙). 그래서 샘플 사건을 고치지 않고 분석하면 "샘플 그대로" 조건(4.10)이 유지된다.
+- `answers`(선택, v0.8): 결과 화면 AI 의견·질문 카드(4.11 `agentReview.questions`)의 답. 답을 쓴 질문만 보낸다(빈 답은 보내지 않음). 규칙:
+  - `questionId`는 **가장 최근 성공 결과의 `agentReview.questions`**에 있는 것만 받는다. 아니면 `400 VALIDATION_ERROR`(`details.fields.answers`). 다른 탭에서 이미 다시 분석해 질문이 바뀐 경우이므로 FE는 결과를 새로고침하게 안내한다
+  - `answer`는 1~500자(앞뒤 공백 제거 후). 벗어나면 `400 VALIDATION_ERROR`
+  - 서버는 `narrative`처럼 답을 **먼저 저장한 뒤** 사전 조건을 검사하고 분석을 시작한다. 답이 하나라도 있으면 `inputVersion` +1(그래서 샘플 "그대로" 조건(4.10)은 깨진다)
+  - 다음 분석에서 에이전트는 사연과 **이 사건에서 지금까지 받은 모든 질문·답**을 가린 뒤 함께 본다. 답은 사용자 진술이라 대조 근거로 쓰일 때 `kind`는 `NARRATIVE`다(새 근거 종류 없음)
+  - 같은 질문에 다시 답하면 마지막 답만 남는다
 - 사전 조건: 사연 20자 이상 + `requiredForAnalysis` 항목(거래내역서, `docType=TRANSACTION_RECORD`) 1개 이상 → 아니면 `422 ANALYSIS_PRECONDITION`, `details.missing`에 빠진 것(`NARRATIVE`, `TRANSACTION_RECORD`)
 - 이미 실행 중 → `409 ANALYSIS_IN_PROGRESS` (`details.runId`)
 - 사용자가 고친 초안이 있고 `overwriteEditedDraft=false` → `409 DRAFT_HAS_EDITS`
 - 사건당 시간당 5회 → `429 RATE_LIMITED`, 서비스 전체 하루 300회 → `429 DAILY_LIMIT`. 하루 한도는 외부 AI를 부르는 실행만 센다(1.1)
-- **상담 안내 검사:** 사전 조건을 통과하면 서버가 사연을 정해 둔 표현 목록(통장·계좌·체크카드 대여·양도, 비밀번호 전달, 환전·구매대행·송금 알바, 현금 인출 후 전달 등)으로 검사한다. 걸리면 AI를 부르지 않고 실행을 바로 `SUCCEEDED`로 끝내며, 결과에 `referral`을 넣고 초안은 만들지 않는다(4.11). 이 검사는 하루 한도에 세지 않는다
+- **상담 안내 검사(v0.8 변경):** 서버가 먼저 사연과 답변을 정해 둔 표현 목록(통장·계좌·체크카드 대여·양도, 비밀번호 전달, 환전·구매대행·송금 알바, 현금 인출 후 전달 등)으로 찾는다. 찾은 부분은 에이전트에 넘기고, **에이전트가 문맥을 읽어** 상담을 권할지 정한다("빌려준 적 없어요"처럼 부정하는 문장은 권하지 않는다). 권할 때는 사연·답변 원문을 인용해야 하고 서버가 원문에 있는지 확인한다. 권하면 실행은 `SUCCEEDED`로 끝나고 결과에 `referral`과 질문(`agentReview.questions`)을 넣으며 초안은 만들지 않는다(4.11). 사용자가 질문에 답하고 다시 분석하면 상담 안내가 풀릴 수 있다. 가짜 분석·미리 만든 결과에서는 표현 목록(부정문 제외)만으로 정한다. 이 실행은 외부 AI를 부르므로 하루 한도에 센다
 
 응답 `202`
 
@@ -455,6 +469,7 @@ FE는 1.5초마다 부르고 `status`가 `RUNNING`이 아니면 멈춘다. 180�
 ```
 
 - `stages[].status`: `PENDING` · `RUNNING` · `DONE` · `FAILED`
+- `TOOL_CALL`은 거래내역·서류 조회 말고 **법령 조회**(v0.8)도 남긴다. 예: `{ "type": "TOOL_CALL", "title": "법령 조회", "summary": "물품 대금이 이의제기 사유가 되는지 확인하려고 법 제7조 조회" }`. step `type` 값은 늘지 않는다.
 - `TOOL_CALL`의 `summary`는 **AI가 밝힌 조회 이유 + 결과 건수**다. 이유에 판정처럼 읽히는 표현이 있으면 서버가 이유를 빼고 조회 범위만 적는다. `VERIFY`는 후검증 결과다(예: "근거와 다른 숫자 1개를 AI가 고쳐 다시 확인했습니다", `docs/agent-design.md` 2.6).
 - `steps`는 AI가 실제로 한 일을 보여 주는 기록이다. 화면에 다 보여 줄 필요는 없지만, 마지막 몇 줄을 흐리게 보여 주면 "AI가 무엇을 하는지" 시연에 좋다. `type`: `OCR` · `TOOL_CALL` · `FINDING` · `CONFLICT` · `DRAFT` · `VERIFY` · `FALLBACK` · `SAFETY` · `FAILED`
 - 서류 하나를 못 읽어도 분석은 계속된다(그 단계만 `FAILED`).
@@ -473,6 +488,7 @@ FE는 1.5초마다 부르고 `status`가 `RUNNING`이 아니면 멈춘다. 180�
   "generatedAt": "2026-11-21T06:45:41Z",
   "precomputed": false,
   "referral": null,
+  "agentReview": { "...": "아래 'AI 의견·질문' 참고(v0.8)" },
   "aiNotice": "AI가 올린 자료를 정리한 결과입니다. 해제 여부를 판단하지 않으며, 은행 심사 결과와 다를 수 있습니다.",
   "deadline": { "...": "4.4와 같음" },
   "findings": [
@@ -539,7 +555,7 @@ FE는 1.5초마다 부르고 `status`가 `RUNNING`이 아니면 멈춘다. 180�
 ```
 
 - `isStale: true` = 분석 뒤에 사연·서류가 바뀌었다. 결과 상단에 "자료가 바뀌었어요. 다시 분석하기" 배너.
-- `referral`: 보통은 `null`. 4.9의 상담 안내 검사에 걸리면 아래 모양이고, 이때 `findings: []`, `draft: null`, `summary`는 모두 0이며 `GET /cases/{id}/draft`는 `404 NOT_FOUND`다. **이전 분석에서 만든 초안이 있었으면 서버가 지운다**(다시 분석해 상담 안내로 끝난 경우). 체크리스트는 평소처럼 준다.
+- `referral`: 보통은 `null`. 4.9의 상담 안내 검사에서 상담을 권하면 아래 모양이고, 이때 `findings: []`, `draft: null`, `summary`는 모두 0이며 `GET /cases/{id}/draft`는 `404 NOT_FOUND`다. **이전 분석에서 만든 초안이 있었으면 서버가 지운다**(다시 분석해 상담 안내로 끝난 경우). 체크리스트는 평소처럼 준다. `agentReview`는 이때도 있고, 어떤 상황이었는지 묻는 질문이 들어 있다(v0.8).
 
 ```json
 "referral": {
@@ -553,7 +569,68 @@ FE는 1.5초마다 부르고 `status`가 `RUNNING`이 아니면 멈춘다. 180�
 }
 ```
 
-  - 이 안내는 사람이나 사건을 판정하는 것이 아니라 정해 둔 표현이 있는지만 본다. `matchedPhrases`를 화면에 그대로 보여 준다. 잘못 걸렸으면 사용자가 사연을 고쳐 다시 분석할 수 있다.
+  - 이 안내는 사람이나 사건을 판정하는 것이 아니라 사연에 상담이 먼저 필요해 보이는 표현이 있음을 알리는 것이다. `matchedPhrases`는 **서버가 사연·답변 원문에 있다고 확인한 글자**이고(v0.8), 화면에 그대로 보여 준다. 잘못 걸렸으면 사용자가 AI 의견·질문 카드의 질문에 답하거나 사연을 고쳐 다시 분석할 수 있다.
+#### AI 의견·질문 — `agentReview` (v0.8)
+
+에이전트가 법령·서류를 근거로 낸 **조건부 의견**과, 소명에 부족한 사실을 묻는 **질문**이다. 사용자가 질문에 답하고 다시 분석하면(4.9 `answers`) 에이전트가 답을 반영해 대조·초안을 다시 만들고 필요하면 또 묻는다. 실제·가짜·미리 만든 결과 모두 채운다. v0.8 이전에 만든 결과는 `null`이다.
+
+```json
+"agentReview": {
+  "notice": "올린 자료와 말씀하신 내용을 기준으로 AI가 정리한 의견입니다. Proofy는 변호사가 아니며, 지급정지 해제 여부는 은행이 판단합니다.",
+  "opinions": [
+    {
+      "opinionId": "o1…",
+      "text": "말씀하신 내용과 거래내역을 기준으로 보면, 11월 8일에 받은 150,000원은 물건값으로 받은 돈이라고 설명할 수 있는 사정으로 보여요.",
+      "findingIds": ["f1…"],
+      "lawRefs": [
+        {
+          "source": "LAW",
+          "label": "법 제7조 제1항 제2호",
+          "quote": "재화 또는 용역의 공급에 대한 대가로 받았거나",
+          "verified": true
+        }
+      ],
+      "needsCheck": false
+    }
+  ],
+  "questions": [
+    {
+      "questionId": "q1…",
+      "text": "대화에서는 '3개 12만원'이라고 했는데 입금은 15만 원이에요. 금액이 달라진 이유가 있나요?",
+      "why": "자료와 어긋난 금액은 은행이 설명을 요청할 수 있어요.",
+      "findingIds": ["f2…"],
+      "lawRefs": []
+    },
+    {
+      "questionId": "q2…",
+      "text": "물건을 보낸 택배 송장이나 배송 조회 화면이 있나요?",
+      "why": "'다음 날 택배로 보냈다'를 뒷받침하는 자료가 아직 없어요.",
+      "findingIds": ["f3…"],
+      "lawRefs": []
+    }
+  ],
+  "answered": [
+    { "questionId": "q0…", "text": "…", "answer": "…", "answeredAt": "2026-11-22T06:45:41Z" }
+  ]
+}
+```
+
+| 필드 | 뜻 |
+|---|---|
+| `notice` | 카드 맨 아래 안내 문구. 서버가 주는 문장을 그대로 보여 준다 |
+| `opinions` | 0~3개. 조건부 의견("말씀하신 내용과 자료를 기준으로 보면 ~로 설명할 수 있어 보여요"). **결과 예측("해제될 거예요", "가능성이 높아요")은 하지 않는다** |
+| `opinions[].findingIds` | 같은 결과의 `findings` ID. 누르면 탭 A의 그 항목으로 이동하게 쓸 수 있다(선택) |
+| `opinions[].needsCheck` | 서버 검사에서 걸린 의견: 근거 조항을 원문에서 못 찾음, 결과를 예측하는 표현, 근거 자료에 없는 금액·날짜. FE는 초안의 "확인 필요"와 같은 표시를 한다 |
+| `lawRefs[]` | 근거 조항. `source`(`LawSource`), `label`(칩에 보일 이름, 서버가 붙임), `quote`(원문 인용), `verified`(서버가 법령 원문에서 찾았나. `false`면 탭 A 인용처럼 흐리게 + "원문에서 찾지 못함") |
+| `questions` | 0~3개. 질문마다 답 입력칸(최대 500자)을 하나씩. 0개면 질문 영역과 "답하고 다시 분석" 버튼을 숨긴다 |
+| `questions[].why` | 왜 묻는지(작은 글씨) |
+| `answered` | 이 사건에서 지금까지 답한 질문, 오래된 것부터. "이전에 답한 내용 N개"로 접어서 보여 준다 |
+
+- **판정 필드는 두지 않는다.** `releasable`·`probability`·`verdict` 같은 필드는 없다. 의견은 결과 화면에만 보여 주고 **소명서 초안에는 넣지 않는다**(초안은 본인의 사실 진술만).
+- 카드 동작: 답을 하나도 안 쓰면 버튼 비활성, 일부만 답하면 쓴 것만 보낸다. 버튼은 지금의 "다시 분석"과 같다(직접 고친 초안이 있으면 `409 DRAFT_HAS_EDITS` 확인창 → `overwriteEditedDraft: true`로 다시 보냄 → 4번 화면).
+
+#### 그 밖의 필드
+
 - `precomputed: true` = 이번에 AI가 분석한 결과가 아니라 샘플용으로 미리 만든 결과다(4.10). 결과 상단에 "지금은 AI 분석을 쓸 수 없어 미리 만든 샘플 결과를 보여 드려요" 배너를 `aiNotice`와 함께 보여 준다.
 - `conflict.field`: `AMOUNT` · `DATE` · `COUNTERPARTY` · `OTHER`. 탭 A의 경고 문구에 `statement`(사용자 진술)와 `found`(자료)를 나란히 보여 준다.
 - `verified: false`인 근거는 "원문에서 찾지 못한 인용"으로 흐리게 표시한다. 서버는 인용을 **AI가 실제로 본 마스킹한 글**(서류 줄의 마스킹본, 마스킹한 사연)과 대조한다. 그래서 `quote`에도 가린 값(`김*수`)이 그대로 나올 수 있다.
@@ -666,7 +743,7 @@ FE는 1.5초마다 부르고 `status`가 `RUNNING`이 아니면 멈춘다. 180�
 
 ## 7. 가짜 분석 모드
 
-서버를 `AGENT_LLM=scripted`로 띄우면 Claude를 부르지 않고 정해진 규칙으로 결과를 만든다. 단계마다 1~2초씩 쉬어서 4번 화면 진행 표시가 보인다. 응답 모양은 실제와 같다(`GOODS` 샘플은 4.11 예시와 같은 결과를 낸다). 4.10의 "미리 만든 결과"는 이 모드가 각 샘플 시나리오에 내는 결과와 같은 것을 쓴다. FE 개발·리허설은 이 모드로 하고, `GET /health`의 `agent` 값으로 어느 모드인지 확인한다.
+서버를 `AGENT_LLM=scripted`로 띄우면 Claude를 부르지 않고 정해진 규칙으로 결과를 만든다. 단계마다 1~2초씩 쉬어서 4번 화면 진행 표시가 보인다. 응답 모양은 실제와 같다(`GOODS` 샘플은 4.11 예시와 같은 결과를 낸다). `agentReview`도 시나리오별로 정해 둔 의견·질문을 낸다(v0.8). 질문에 답하고 다시 분석해도 가짜 분석은 답 내용을 읽지 않고 같은 결과를 내며, 답한 질문은 `answered`로 옮긴다. 상담 안내는 표현 목록(부정문 제외)만으로 정한다. 4.10의 "미리 만든 결과"는 이 모드가 각 샘플 시나리오에 내는 결과와 같은 것을 쓴다. FE 개발·리허설은 이 모드로 하고, `GET /health`의 `agent` 값으로 어느 모드인지 확인한다.
 
 ## 8. 아직 안 정한 것
 
@@ -681,6 +758,7 @@ FE는 1.5초마다 부르고 `status`가 `RUNNING`이 아니면 멈춘다. 180�
 
 | 날짜 | 버전 | 내용 |
 |---|---|---|
+| 2026-11-22 | 0.8(제안) | 인터뷰형 에이전트(`docs/proposals/v0.8-agent-interview.md`). ① 4.11 결과에 `agentReview`(조건부 AI 의견 `opinions`, 근거 조항 `lawRefs`, 질문 `questions`, 이전 답 `answered`), 2절 `LawSource` ② 4.9 분석 시작에 `answers`(질문 답변, 답이 있으면 `inputVersion` +1, 잘못된 `questionId`는 400) ③ 상담 안내: 표현 목록이 찾은 부분을 에이전트가 문맥으로 확인해 정함, `matchedPhrases`는 서버가 확인한 원문 인용, 상담 안내 결과에도 질문이 있어 답하고 다시 분석 가능, 하루 한도에 셈. `referral` 응답 모양은 그대로 ④ 4.10 법령 조회도 `TOOL_CALL` ⑤ 3절 5번 화면: 탭 위(상담 안내 때는 상담 카드 아래)에 AI 의견·질문 카드. **필드 추가뿐이라 v0.6.5 FE가 그대로 동작한다.** FE 할 일: 카드 1개 새로, `ResultView`·`useAnalysisRetry`·`types/api.ts` 수정 |
 | 2026-11-21 | 0.1 | 최초 작성 |
 | 2026-11-21 | 0.2 | ① 사건은 화면 2 "다음"에서 생성 확정(사연은 화면 3에서 `PATCH`) ② `COMPARING` 문구를 "거래내역과 대조 중"으로, FE는 `stages[].label`만 표시 ③ 요구 서류에 `requiredForAnalysis` 추가, 거래내역서를 분석 시작 조건으로(`422`의 `details.missing`) |
 | 2026-11-21 | 0.3 | 외부 검토 반영. ① 초안: `CONFLICT` 연결 문장 자동 확인 필요, 진술 값 일치 시 서버가 연결, `warnings`, 문장별 `confirmed`·`unconfirmedCount`, 복사·PDF 전 확인창 ② 개인정보 보장 항목·`demoMode`·합성 데이터 안내 ③ `POST /cases/sample`, `GET /samples` 샘플 체험 ④ 일정에 리허설·소개서·제출(업로드+이메일) ⑤ `ANALYSIS_INPUT` 분류 신설, 물품 거래는 사업자 판매 대금 전제·예시를 청년 1인 판매 사업자로 ⑥ IP당 사건 생성 제한, `DAILY_LIMIT` ⑦ 미래 날짜 400 ⑧ 분석 시작에 `narrative` 동봉 ⑨ CORS 허용 헤더 |
