@@ -1,6 +1,6 @@
 # T10 상담 안내 + 판정 필드 부재
 
-- 단계: 2단계 가짜 분석 · 예정: 11/22 오후 · 상태: 대기 · 이슈: #12 · PR: 없음
+- 단계: 2단계 가짜 분석 · 예정: 11/22 오후 · 상태: PR · 이슈: #12 · PR: 열림
 
 ## 범위
 
@@ -54,6 +54,23 @@
 ## 결정
 
 - 11/22 사용자 "추천안대로": 정할 것 1~4 추천안, 계약 테스트 T10-a~e 승인
+- 11/22 구현 중 보충
+  - 표현 목록에서 그냥 "카드"는 뺐다("카드를 판매하는 가게"가 걸림). "체크카드·직불카드"만. 1묶음에 `건네·건넸`을 넣음(agent-design 2.1 예시 "체크카드를 건넸고")
+  - 상담 안내 결과는 `unreadEvidence`도 `[]`(summary 0과 맞춤), 의견 없음, 질문의 대조 번호는 뗌(대조가 없으므로)
+  - AI가 권했는데 질문을 안 냈으면 고정 질문 하나("어떤 상황에서 통장(계좌)을 건네거나 돈을 옮기게 됐는지 알려 주세요")
+  - 확인 로직은 `app/agent/consult.py`(계획의 `verify.py` 대신 새 파일. 가짜 분석도 같이 써서)
+  - T10-e: `acceptedDocTypes`(계약의 받는 서류 종류 칸)는 `accept`가 들어가지만 판정과 무관해 예외로 둠
+  - 프롬프트 버전: 대조 `t10-v1`(초안은 `t25-v1` 그대로)
 
 ## 결과
+
+- `app/services/safety.py`(새): 표현 목록 4묶음 + 부정문 제외, 안내 문구·연락처. `app/services/analysis.py`가 시작 때 사연·답 원문으로 찾아 `RunContext.safety_hits`로 넘김, 상담 안내면 사용 기록 `referral=true`
+- `app/agent/consult.py`(새): `by_phrases`(가짜·미리 만든 결과), `check_consult`(AI 권유 + 원문 인용 확인, T10-d 규칙)
+- `app/agent/compare.py`: 첫 메시지 `checkPhrases`, 출력 `consult {recommend, quotes, reason}`, 상담 안내면 대조·의견·권장 서류 버리고 질문만. `app/agent/scripted.py`: 표현이 있으면 step `SAFETY` + 고정 질문. `app/agent/runner.py`: 상담 안내면 ③ 초안 건너뜀
+- `app/services/results.py`: `referral_json` 저장, 사건 초안 행 삭제, 조회 때 `referral`·빈 결과·summary 0. `app/schemas/result.py`: `Referral` 모델
+- 테스트: `tests/test_t10_referral.py`(T10-a~e + 표현 묶음 단위), `test_t16_compare.py` T16-a 칸 목록에 `consult`·`recommend`·`quotes`
+- `uv run python -m pytest -q` 197 passed·2 skipped, `uv run ruff check .` 통과(11/22)
+- 로컬 실서버(가짜 분석, 비용 0): 일반 분석 뒤 초안 200 → 통장 대여 사연으로 다시 분석하면 step `SAFETY`, `referral`(`통장을 빌려`, 132·1332), 대조·초안 비움, 질문 1개, `GET /draft` 404 → 사연을 고치고 질문에 답해 다시 분석하면 상담 안내 풀림·초안 생김·`answered` 1개
+- 미검증: 실제 Claude의 문맥 판단(새 프롬프트 `t10-v1`은 가짜 SDK로만 확인), 배포 서버
+
 

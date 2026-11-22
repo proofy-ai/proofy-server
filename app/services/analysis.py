@@ -15,6 +15,7 @@ import threading
 import time
 import uuid
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import date, timedelta
 from typing import Any
 
@@ -48,6 +49,7 @@ from app.services.questions import answer_pairs, check_answers, previous_review,
 from app.services.requirements import requirements_for
 from app.services.results import save_output
 from app.services.runs import latest_run
+from app.services.safety import find_phrases
 from app.services.usage import count_ai_runs_on
 
 logger = logging.getLogger("proofy.analysis")
@@ -188,6 +190,10 @@ def start_analysis(
         answers=answer_pairs(db, case.id),
         # 새 실행은 아직 RUNNING이라 지난 성공 실행이 잡힌다
         previous=previous_review(db, case),
+    )
+    # 상담 안내 표현(T10, ⓪ SAFETY): 사연과 지금까지의 답 원문에서 코드 목록으로 찾는다
+    ctx = replace(
+        ctx, safety_hits=tuple(find_phrases([ctx.narrative, *(a.answer for a in ctx.answers)]))
     )
     threading.Thread(
         target=_run_in_background,
@@ -407,11 +413,12 @@ class DbRecorder:
                 _record_usage(db, run, output)
             if error is None and output is not None:
                 save_output(db, run, output)
-            if error is None and precomputed:
+            referral = error is None and output is not None and output.referral is not None
+            if error is None and (precomputed or referral):
                 db.execute(
                     update(UsageEvent)
                     .where(UsageEvent.run_id == run.id, UsageEvent.kind == "ANALYSIS_RUN")
-                    .values(precomputed=True)
+                    .values(precomputed=precomputed, referral=referral)
                 )
             _finish_run(db, run, error, precomputed)
 

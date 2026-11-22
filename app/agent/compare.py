@@ -19,10 +19,12 @@ Claude가 조회 도구를 골라 쓰며 사연과 자료를 비교한다.
 import json
 import logging
 import re
+from dataclasses import replace
 from datetime import date
 from typing import Any
 
 from app.agent import law
+from app.agent.consult import REFERRAL_QUESTION, check_consult
 from app.agent.drafting import JUDGMENT as _JUDGMENT
 from app.agent.drafting import PROMPT_VERSION as DRAFT_PROMPT_VERSION
 from app.agent.drafting import Drafter
@@ -36,7 +38,7 @@ from app.agent.verify import CONFLICT_FIELDS, STATUSES, check_output
 
 logger = logging.getLogger(__name__)
 
-PROMPT_VERSION = "t25-v1"
+PROMPT_VERSION = "t10-v1"
 # 도구 호출 총횟수(한 턴 안의 병렬 호출 포함)와 모델 요청 횟수 상한
 # 법령 조회(T23)가 1~3회 더 들어 8 → 12, 10 → 14로 늘렸다(T23 결정 3)
 MAX_TOOL_CALLS = 12
@@ -244,6 +246,14 @@ OUTPUT_SCHEMA: dict[str, Any] = _object(
                 }
             ),
         },
+        # 상담 권유(T10). 판정 칸이 아니라 상담이 먼저 필요해 보이는지와 그 원문 인용
+        "consult": _object(
+            {
+                "recommend": {"type": "boolean"},
+                "quotes": {"type": "array", "items": {"type": "string"}},
+                "reason": {"type": "string"},
+            }
+        ),
     }
 )
 
@@ -312,6 +322,19 @@ SYSTEM_PROMPT = f"""\
   있는지, 이의제기신청서 사유에 필요한데 사연에 없는 사실, 계획했지만 확인하지 못한 것.
 - text는 사용자에게 하는 질문 한 문장(해요체), why는 왜 묻는지 한 문장입니다.
 - answers에 이미 답한 질문은 다시 묻지 않습니다. 답으로 풀리지 않았으면 더 구체적으로 묻습니다.
+
+## consult(상담 권유)
+- 첫 메시지의 checkPhrases는 서버가 사연·답에서 찾은 표현입니다(통장·계좌·체크카드를 빌려주거나
+  넘김, 비밀번호 전달, 환전·송금 알바, 현금을 찾아 남에게 전달 등). 사연과 답의 문맥을 읽고,
+  사용자가 자기 계좌나 접근 수단을 남에게 넘겼거나 남의 돈을 옮겨 준 것으로 읽히면
+  recommend를 true로 합니다. 이때는 소명서보다 법률 상담이 먼저라는 안내가 나갑니다.
+- "빌려준 적이 없어요", "거절했어요"처럼 부정하거나, 다른 뜻으로 쓴 표현이면 false입니다.
+  checkPhrases가 비어 있어도 사연·답에 그런 내용이 분명하면 true로 할 수 있습니다.
+- true면 quotes에 그렇게 읽은 사연·답 글을 고치지 않고 그대로 짧게 복사하고(1~3개),
+  questions에 어떤 상황이었는지 묻는 질문을 1개 이상 넣습니다. 이때 findings·opinions는 쓰이지
+  않습니다.
+- reason은 왜 그렇게 정했는지 한 문장입니다. 사람을 평가하거나 결과를 예측하지 않습니다.
+- 권할 것이 없으면 recommend false, quotes 빈 배열, reason 빈 문자열입니다.
 """
 
 
@@ -379,6 +402,16 @@ class ClaudeAnalyzer:
             seen_law_refs=self.seen_law_refs,
             plan_size=len(self.plan),
         )
+        # 상담 안내(T10): AI가 문맥으로 정하고 서버가 인용을 확인한다
+        decision = check_consult(raw.get("consult"), out.quote_basis(), ctx.safety_hits)
+        for step in decision.steps:
+            rec.step(*step)
+        if decision.phrases is not None:
+            out.referral = decision.phrases
+            # 대조·의견·권장 서류는 쓰지 않으므로 질문의 대조 번호도 뗀다(계약 4.11)
+            questions = [replace(q, finding_indexes=()) for q in checked.questions]
+            out.questions += questions or [REFERRAL_QUESTION]
+            return
         out.findings += checked.findings
         out.recommended += checked.recommended
         out.opinions += checked.opinions
@@ -452,6 +485,8 @@ class ClaudeAnalyzer:
             # T25: 지금까지 답한 질문·답과 지난 분석 성찰(가린 글). 첫 분석이면 빈 목록·null
             "answers": [{"question": a.question, "answer": a.answer} for a in out.masked_answers],
             "previousRun": out.masked_previous,
+            # T10: 표현 목록이 찾은 상담 안내 표현(가린 글). 없으면 빈 목록
+            "checkPhrases": list(out.masked_check_phrases),
         }
         return seal_payload(payload)
 

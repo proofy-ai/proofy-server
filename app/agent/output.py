@@ -142,6 +142,10 @@ class AnalysisOutput:
     masked_answers: list[MaskedAnswer] = field(default_factory=list)
     # 지난 성공 분석 성찰(T25, agent-design-v2 4.6). runner가 가린 첫 메시지용 자료. 첫 분석은 None
     masked_previous: dict[str, Any] | None = None
+    # 표현 목록이 찾은 상담 안내 표현(T10)을 가린 글. 에이전트 첫 메시지 `checkPhrases`
+    masked_check_phrases: list[MaskedText] = field(default_factory=list)
+    # 상담 안내로 끝나면 화면에 보일 확인된 표현(`matchedPhrases`). 이때 대조·의견·초안은 없다
+    referral: tuple[str, ...] | None = None
     transactions: list[TransactionRow] = field(default_factory=list)
     findings: list[Finding] = field(default_factory=list)
     recommended: list[RecommendedDoc] = field(default_factory=list)

@@ -131,6 +131,10 @@ def test_t16a_output_schema_has_no_judgement_fields():
         "findingIndexes",
         "lawRefs",
         "ref",
+        # T10: 상담 권유(판정 칸 아님: 상담이 먼저 필요해 보이는지와 원문 인용)
+        "consult",
+        "recommend",
+        "quotes",
     }
     status = OUTPUT_SCHEMA["properties"]["findings"]["items"]["properties"]["status"]
     assert set(status["enum"]) == {"MATCH", "CONFLICT", "STATEMENT_ONLY", "UNKNOWN"}

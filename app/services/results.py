@@ -10,9 +10,10 @@
 import logging
 import re
 import uuid
+from dataclasses import replace
 from datetime import date
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.agent.output import MAX_RECOMMENDED, AnalysisOutput, Finding
@@ -22,6 +23,7 @@ from app.models import (
     Case,
     ChecklistItemRow,
     ClaimFinding,
+    Draft,
     Evidence,
     FindingSource,
     Transaction,
@@ -33,6 +35,8 @@ from app.schemas.result import (
     FindingOut,
     FindingSourceOut,
     NarrativeSource,
+    Referral,
+    ReferralContact,
     ResultResponse,
     ResultSummary,
     TransactionSource,
@@ -44,6 +48,7 @@ from app.services.deadline import compute_deadline
 from app.services.drafts import FindingInfo, current_draft, replace_draft, to_draft_out
 from app.services.review import agent_review, save_review
 from app.services.runs import latest_succeeded_run
+from app.services.safety import CONTACTS, REFERRAL_CODE, REFERRAL_MESSAGE
 
 logger = logging.getLogger("proofy.results")
 
@@ -101,6 +106,9 @@ def save_output(db: Session, run: AnalysisRun, out: AnalysisOutput) -> None:
         )
 
     db.flush()
+    if out.referral is not None:
+        _save_referral(db, run, out)
+        return
     saved = [
         _add_finding(db, run, seq, finding, evidence, tx_ids)
         for seq, finding in enumerate(out.findings, start=1)
@@ -123,6 +131,28 @@ def save_output(db: Session, run: AnalysisRun, out: AnalysisOutput) -> None:
                 created_at=now,
             )
         )
+
+
+def _save_referral(db: Session, run: AnalysisRun, out: AnalysisOutput) -> None:
+    """상담 안내로 끝난 실행(T10, 계약 4.11). 대조·의견·권장 서류·초안 없이 안내와 질문만 남긴다.
+
+    이전 분석의 초안이 있었으면 지운다(`GET /draft` 404, 다시 분석 때 `DRAFT_HAS_EDITS`도 안 걸림).
+    """
+    run.referral_json = {"code": REFERRAL_CODE, "matchedPhrases": list(out.referral or ())}
+    save_review(db, run, replace(out, opinions=[]), [])
+    db.execute(delete(Draft).where(Draft.case_id == run.case_id))
+
+
+def _referral_out(run: AnalysisRun) -> Referral | None:
+    raw = run.referral_json
+    if not raw:
+        return None
+    return Referral(
+        code=REFERRAL_CODE,
+        matched_phrases=list(raw.get("matchedPhrases") or []),
+        message=REFERRAL_MESSAGE,
+        contacts=[ReferralContact(**c) for c in CONTACTS],
+    )
 
 
 def _add_finding(
@@ -298,13 +328,18 @@ def get_result(db: Session, case: Case, today: date) -> ResultResponse:
         counts[f.status] += 1
     draft_row = current_draft(db, case, run)
     draft = to_draft_out(draft_row) if draft_row is not None else None
+    referral = _referral_out(run)
+    if referral is not None:
+        # 상담 안내: findings 빈 목록, draft null, summary 모두 0(계약 4.11). 체크리스트는 평소대로
+        findings, draft, unread = [], None, []
+        counts = {s: 0 for s in STATUSES}
     return ResultResponse(
         run_id=run.id,
         based_on_input_version=run.based_on_input_version,
         is_stale=case.input_version != run.based_on_input_version,
         generated_at=run.finished_at or run.started_at,
         precomputed=run.precomputed,
-        referral=None,
+        referral=referral,
         agent_review=agent_review(db, run),
         ai_notice=AI_NOTICE,
         deadline=compute_deadline(case.public_notice_date, today),
@@ -314,7 +349,7 @@ def get_result(db: Session, case: Case, today: date) -> ResultResponse:
         unread_evidence=unread,
         summary=ResultSummary(
             finding_counts=counts,
-            missing_documents=checklist.missing_count,
+            missing_documents=0 if referral is not None else checklist.missing_count,
             sentences_needing_check=(
                 sum(1 for s in draft.sentences if s.needs_check) if draft else 0
             ),
