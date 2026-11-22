@@ -30,7 +30,7 @@ from app.agent.steps import Recorder
 
 logger = logging.getLogger(__name__)
 
-PROMPT_VERSION = "t17-v1"
+PROMPT_VERSION = "t25-v1"
 SECTIONS = ("DEPOSIT_REASON", "NO_INVOLVEMENT", "VICTIM_CONTEXT")
 SECTION_WORDS = {
     "DEPOSIT_REASON": "입금 경위",
@@ -127,7 +127,8 @@ SYSTEM_PROMPT = """\
 "이의제기 사유" 칸에 옮겨 적을 소명서 초안을 씁니다.
 신청인 본인이 은행에 내는 글이므로 1인칭 존댓말 서술("본인은 …습니다")로 씁니다.
 첫 메시지에 사연, 사용자가 입력한 입금, 함께 낼 서류(uploadedDocuments),
-자료와 대조한 항목(findings, 번호 index)이 있습니다.
+자료와 대조한 항목(findings, 번호 index), 사용자가 질문에 답한 내용(answers)이 있습니다.
+answers의 답도 사연처럼 본인이 말한 사실이므로 본인 진술로 쓸 수 있습니다.
 
 ## 묶음(section)
 - DEPOSIT_REASON 입금 경위: 언제, 얼마를, 왜 받았는지와 거래 내용.
@@ -396,6 +397,8 @@ def _first_message(ctx: RunContext, out: AnalysisOutput) -> MaskedText:
             if e.doc_type != "NOTICE"
         ],
         "findings": findings,
+        # T25: 사용자가 질문에 답한 내용(가린 글)
+        "answers": [{"question": a.question, "answer": a.answer} for a in out.masked_answers],
     }
     return seal_payload(payload)
 

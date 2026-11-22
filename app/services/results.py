@@ -69,7 +69,8 @@ def save_output(db: Session, run: AnalysisRun, out: AnalysisOutput) -> None:
 
     모델 사이에 relationship이 없어 INSERT 순서가 FK를 따르지 않으므로, 참조되는 행부터 flush 한다.
     """
-    run.masked_narrative = out.masked_narrative
+    # 인용 대조 기준: 가린 사연 + 가린 질문·답(T25). 답을 인용한 근거도 verified가 된다
+    run.masked_narrative = out.quote_basis()
     evidence = {
         e.id: e for e in db.scalars(select(Evidence).where(Evidence.case_id == run.case_id))
     }

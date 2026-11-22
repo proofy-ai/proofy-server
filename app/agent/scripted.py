@@ -67,6 +67,8 @@ PLANS: dict[str, tuple[tuple[str, str], ...]] = {
     ),
 }
 PLAN_OTHER: tuple[tuple[str, str], ...] = (("사연의 입금", "사연"),)
+# 다시 분석할 때 계획 줄 앞에 붙이는 고정 문장(T25, agent-design-v2 4.6)
+REVISION = "지난 분석과 답변을 보고 다시 확인합니다"
 
 # 의견의 근거 조항 인용(법 제7조 제1항 제2호·제3호 원문 그대로)
 GOODS_LAW_QUOTE = "재화 또는 용역의 공급에 대한 대가로 받았거나"
@@ -133,13 +135,18 @@ class ScriptedAnalyzer:
         self._pause(ctx)
         plan = PLANS.get(ctx.inflow_type, PLAN_OTHER)
         # 조사 계획(T24, agent-design-v2 4.3). 실제 분석의 `make_plan` 줄과 같은 모양
-        rec.step("TOOL_CALL", "조사 계획", plan_summary(plan))
+        # 다시 분석이면 고정 revision(T25). 답 내용은 읽지 않는다(계약 7절)
+        revision = REVISION if ctx.previous is not None else None
+        rec.step("TOOL_CALL", "조사 계획", plan_summary(plan, revision))
         if ctx.inflow_type == "GOODS":
             self._goods(ctx, rec, out)
         elif ctx.inflow_type == "UNEXPECTED":
             self._unexpected(ctx, rec, out)
         else:
             self._statement_only(ctx, out)
+        # 이미 답한 질문은 다시 내지 않는다(T25)
+        answered = {a.question for a in ctx.answers}
+        out.questions = [q for q in out.questions if q.text not in answered]
         counts = {s: sum(1 for f in out.findings if f.status == s) for s in _STATUS_WORDS}
         summary = " · ".join(f"{_STATUS_WORDS[s]} {n}" for s, n in counts.items() if n)
         rec.step("FINDING", f"사연 속 주장 {len(out.findings)}개 대조", f"{summary}입니다.")

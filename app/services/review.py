@@ -97,12 +97,17 @@ def _law_refs_out(raw: list[dict[str, Any]]) -> list[LawRefOut]:
 
 
 def answered_questions(db: Session, case_id: str) -> list[AnalysisQuestion]:
-    """이 사건에서 답한 질문, 답한 순서."""
+    """이 사건에서 답한 질문, 답한 순서.
+
+    시각은 초 단위라 같은 초의 답은 질문이 나온 실행 순서 → 질문 순서로 가른다. 답은 가장 최근
+    성공 실행의 질문에만 받으므로(T25) 뒤 실행의 질문이 늘 뒤에 답한 것이다.
+    """
     return list(
         db.scalars(
             select(AnalysisQuestion)
+            .join(AnalysisRun, AnalysisRun.id == AnalysisQuestion.analysis_run_id)
             .where(AnalysisQuestion.case_id == case_id, AnalysisQuestion.answer.is_not(None))
-            .order_by(AnalysisQuestion.answered_at, AnalysisQuestion.seq)
+            .order_by(AnalysisQuestion.answered_at, AnalysisRun.version, AnalysisQuestion.seq)
         )
     )
 

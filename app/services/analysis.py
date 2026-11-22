@@ -44,6 +44,7 @@ from app.services.cases import update_case
 from app.services.clock import utc_now
 from app.services.drafts import has_user_edits
 from app.services.evidence import list_evidence
+from app.services.questions import answer_pairs, check_answers, previous_review, save_answers
 from app.services.requirements import requirements_for
 from app.services.results import save_output
 from app.services.runs import latest_run
@@ -89,13 +90,18 @@ def start_analysis(
     session_factory: sessionmaker[Session],
     today: date,
 ) -> AnalysisRun:
-    """검사 순서: 사연 저장 → 사전 조건 422 → 실행 중 409 → 고친 초안 409 → 하루 한도 429
-    → 실행 시작. 하루 한도를 넘었어도 샘플 그대로인 사건은 429 대신 AI를 부르지 않고
-    미리 만든 결과로 끝낸다(T11).
+    """검사 순서: 답 검사 400 → 사연 저장 → 답 저장 → 사전 조건 422 → 실행 중 409
+    → 고친 초안 409 → 하루 한도 429 → 실행 시작.
+
+    답이 틀리면 사연도 저장하지 않는다(T25 결정 1, 요청이 반만 반영되지 않게).
+    하루 한도를 넘었어도 샘플 그대로인 사건은 429 대신 AI를 부르지 않고 미리 만든 결과로
+    끝낸다(T11).
     """
+    answers = check_answers(db, case, payload.answers or [])
     if payload.narrative is not None:
         # 저장된 값과 다를 때만 inputVersion +1(계약 4.5와 같은 규칙)
         update_case(db, case, CasePatch(narrative=payload.narrative), today)
+    save_answers(db, case, answers)
     _check_precondition(db, case)
 
     with _case_lock(case.id):
@@ -179,6 +185,9 @@ def start_analysis(
         anthropic_model=settings.anthropic_model,
         anthropic_effort=settings.anthropic_effort,
         allow_fallback=allow_fallback,
+        answers=answer_pairs(db, case.id),
+        # 새 실행은 아직 RUNNING이라 지난 성공 실행이 잡힌다
+        previous=previous_review(db, case),
     )
     threading.Thread(
         target=_run_in_background,

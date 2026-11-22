@@ -6,10 +6,10 @@
 
 from dataclasses import dataclass, field
 from datetime import date
-from typing import Literal
+from typing import Any, Literal
 
 from app.agent.extract import Extraction
-from app.agent.masking import MaskedText
+from app.agent.masking import MaskedText, join_masked
 
 FindingStatus = Literal["MATCH", "CONFLICT", "STATEMENT_ONLY", "UNKNOWN"]
 ConflictField = Literal["AMOUNT", "DATE", "COUNTERPARTY", "OTHER"]
@@ -124,12 +124,24 @@ class Question:
     law_refs: tuple[LawRef, ...] = ()
 
 
+@dataclass(frozen=True)
+class MaskedAnswer:
+    """사용자가 답한 질문과 답(T25). runner가 사건 이름 목록으로 가린 글."""
+
+    question: MaskedText
+    answer: MaskedText
+
+
 @dataclass
 class AnalysisOutput:
     """세 단계가 차례로 채운다."""
 
     # AI가 본 사연(마스킹본, runner가 ① 단계 전에 채움). 인용 대조 기준
     masked_narrative: MaskedText | None = None
+    # 지금까지 답한 질문·답(T25, 답한 순서). runner가 가린다. 에이전트 첫 메시지와 인용 대조에 쓴다
+    masked_answers: list[MaskedAnswer] = field(default_factory=list)
+    # 지난 성공 분석 성찰(T25, agent-design-v2 4.6). runner가 가린 첫 메시지용 자료. 첫 분석은 None
+    masked_previous: dict[str, Any] | None = None
     transactions: list[TransactionRow] = field(default_factory=list)
     findings: list[Finding] = field(default_factory=list)
     recommended: list[RecommendedDoc] = field(default_factory=list)
@@ -146,3 +158,15 @@ class AnalysisOutput:
     input_tokens: int | None = None
     output_tokens: int | None = None
     cost_micro_usd: int | None = None
+
+    def quote_basis(self) -> MaskedText | None:
+        """사연 인용(`NARRATIVE`)을 대조할 글: 가린 사연 + 가린 질문·답(T25).
+
+        답은 사용자 진술이라 사연과 같이 `NARRATIVE` 근거로 인용할 수 있다(계약 4.9).
+        """
+        if self.masked_narrative is None:
+            return None
+        parts = [self.masked_narrative]
+        for a in self.masked_answers:
+            parts += [a.question, a.answer]
+        return join_masked(parts, "\n\n")

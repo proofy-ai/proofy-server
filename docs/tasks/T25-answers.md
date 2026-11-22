@@ -1,6 +1,6 @@
 # T25 답변 받기 (`answers`)
 
-- 단계: 3단계 실제 AI(계약 v0.8, 11/22 추가) · 예정: 11/22 저녁 · 상태: 대기 · 이슈: 없음 · PR: 없음
+- 단계: 3단계 실제 AI(계약 v0.8, 11/22 추가) · 예정: 11/22 저녁 · 상태: PR · 이슈: #66 · PR: 열림
 
 ## 범위
 
@@ -55,5 +55,22 @@
 ## 결정
 
 - 11/22 사용자 "추천안대로": 정할 것 1·2 추천안(1은 설명 후 진행), 계약 테스트 T25-a~c 승인
+- 11/22 구현 중 보충
+  - 답 검사는 `app/services/questions.py`의 `check_answers`가 모두 하고 오류 칸을 `answers` 하나로 모은다(pydantic 칸별 오류 대신). 받는 질문은 가장 최근 성공 실행의 질문 전부(답한 것 포함, 그 실행이 끝난 뒤 다시 분석이 실패했을 때 다시 답할 수 있게)
+  - 사연과 답을 같이 보내 둘 다 바뀌면 `inputVersion`은 +2(각각 +1). 계약은 "+1 이상"만 기대하므로 그대로
+  - `previousRun`의 "계획했지만 확인 못 한 항목"은 저장 칸이 없지만 실행 step `VERIFY` "계획 점검" 문장(코드가 만든 문장)에 들어 있어 그 문장을 `planCheck`로 넘긴다. 새 표 없음
+  - `answered` 순서: 시각이 초 단위라 같은 초의 답은 질문이 나온 실행 순서 → 질문 순서로 가른다(전체 테스트에서 순서가 흔들려 찾음)
+  - 프롬프트 버전 `t25-v1`(대조·초안). 답을 `NARRATIVE`로 인용하는 법, 답만 있는 주장은 `STATEMENT_ONLY`, 초안은 답의 사실도 본인 진술로
 
 ## 결과
+
+- `app/services/questions.py`(새): `check_answers`·`save_answers`·`answer_pairs`·`previous_review`
+- `app/agent/runner.py`: `AnswerPair`·`PreviousRun`, 가리기 단계에서 답 속 `○○○ 씨`도 이름 목록에, 질문·답·지난 분석을 가림. `app/agent/output.py`: `masked_answers`·`masked_previous`·`quote_basis()`(가린 사연 + 질문·답, 저장되는 인용 대조 기준). `app/agent/masking.py`: `join_masked`
+- `app/agent/compare.py`·`drafting.py`: 첫 메시지 `answers`·`previousRun`, 프롬프트 `t25-v1`
+- `app/agent/scripted.py`: 답한 질문(같은 글) 안 냄, 다시 분석이면 고정 `revision`
+- `app/services/analysis.py`: 답 검사 → 사연 저장 → 답 저장 → 사전 조건 순서, `RunContext.answers`·`previous`
+- `app/services/review.py`: `answered` 정렬 보강
+- 테스트: `tests/test_t25_answers.py`(T25-a·b·c, c에 `previousRun` 단위 확인 포함)
+- `uv run python -m pytest -q` 183 passed·2 skipped, `uv run ruff check .` 통과(11/22). T25-b는 고친 뒤 6회 연속 통과
+- 로컬 실서버(가짜 분석, 비용 0): test02 샘플에서 없는 질문 400, 둘째 질문에 답하고 다시 분석 → `SUCCEEDED`, 계획 줄 revision, `inputVersion` 1→2, 질문 1개 남음, `answered` 1개, `isStale` false
+- 미검증: 실제 Claude로 답한 뒤 다시 분석(새 프롬프트 `t25-v1`은 가짜 SDK로만 확인), 배포 서버

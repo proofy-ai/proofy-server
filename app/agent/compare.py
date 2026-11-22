@@ -36,7 +36,7 @@ from app.agent.verify import CONFLICT_FIELDS, STATUSES, check_output
 
 logger = logging.getLogger(__name__)
 
-PROMPT_VERSION = "t24-v1"
+PROMPT_VERSION = "t25-v1"
 # 도구 호출 총횟수(한 턴 안의 병렬 호출 포함)와 모델 요청 횟수 상한
 # 법령 조회(T23)가 1~3회 더 들어 8 → 12, 10 → 14로 늘렸다(T23 결정 3)
 MAX_TOOL_CALLS = 12
@@ -276,7 +276,8 @@ SYSTEM_PROMPT = f"""\
 - UNKNOWN: 자료가 흐리거나 부족해 확인하지 못했다
 
 ## sources(근거)
-- NARRATIVE: quote에 사연 글을 고치지 말고 그대로 일부 복사한다
+- NARRATIVE: quote에 사연 글이나 answers의 answer 글을 고치지 말고 그대로 일부 복사한다.
+  답도 사용자 진술이라 NARRATIVE다. 답으로만 뒷받침되는 주장은 STATEMENT_ONLY다
 - EVIDENCE: evidenceId와 regionIndex는 get_evidence_regions가 돌려준 값, quote는 그 줄 text에서
   그대로 복사한 부분
 - TRANSACTION: transactionId는 get_transactions가 돌려준 값만 쓴다
@@ -448,6 +449,9 @@ class ClaudeAnalyzer:
             "documents": documents,
             "transactionRowCount": len(out.transactions),
             "fixedChecklist": list(ctx.checklist_labels),
+            # T25: 지금까지 답한 질문·답과 지난 분석 성찰(가린 글). 첫 분석이면 빈 목록·null
+            "answers": [{"question": a.question, "answer": a.answer} for a in out.masked_answers],
+            "previousRun": out.masked_previous,
         }
         return seal_payload(payload)
 
