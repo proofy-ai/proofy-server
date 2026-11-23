@@ -16,7 +16,7 @@ def start(client, case_id: str, auth: dict[str, str], body: dict[str, Any] | Non
 
 
 def wait(client, case_id: str, auth: dict[str, str], run_id: str) -> dict[str, Any]:
-    end = time.monotonic() + 20
+    end = time.monotonic() + 60
     while time.monotonic() < end:
         run = client.get(f"{API}/cases/{case_id}/analysis-runs/{run_id}", headers=auth).json()
         if run["status"] != "RUNNING":

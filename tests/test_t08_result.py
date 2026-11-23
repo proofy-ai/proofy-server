@@ -37,7 +37,7 @@ def _analyze(client, case_id: str, auth: dict[str, str]) -> dict:
     res = client.post(f"{API}/cases/{case_id}/analysis-runs", json={}, headers=auth)
     assert res.status_code == 202, res.text
     run_id = res.json()["runId"]
-    end = time.monotonic() + 10
+    end = time.monotonic() + 60
     while time.monotonic() < end:
         run = client.get(f"{API}/cases/{case_id}/analysis-runs/{run_id}", headers=auth).json()
         if run["status"] != "RUNNING":

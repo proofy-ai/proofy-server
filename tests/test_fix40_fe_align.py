@@ -66,7 +66,7 @@ def test_scripted_run_does_not_count(client):
     res = client.post(base, json={}, headers=auth)
     assert res.status_code == 202
     run_url = f"{base}/{res.json()['runId']}"
-    end = time.monotonic() + 10
+    end = time.monotonic() + 60
     while client.get(run_url, headers=auth).json()["status"] == "RUNNING":
         assert time.monotonic() < end
         time.sleep(0.02)

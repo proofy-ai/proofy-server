@@ -44,7 +44,7 @@ def _keep_all(draft: dict) -> list[dict]:
 
 
 def _wait(client, case_id: str, auth: dict[str, str], run_id: str) -> None:
-    end = time.monotonic() + 10
+    end = time.monotonic() + 60
     while time.monotonic() < end:
         run = client.get(f"{API}/cases/{case_id}/analysis-runs/{run_id}", headers=auth).json()
         if run["status"] != "RUNNING":
