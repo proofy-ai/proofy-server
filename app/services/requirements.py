@@ -141,7 +141,7 @@ _BY_TYPE: dict[str, tuple[Requirement, ...]] = {
             category="TYPE_GUIDE",
             accepted_doc_types=("CHAT",),
             note=(
-                "협박 문자가 없으면 이의제기가 받아들여지기 어렵다는 보도가 있습니다. "
+                "통장협박 피해는 협박 문자 같은 객관적인 자료로 소명할 수 있습니다. "
                 "받은 메시지는 지우지 말고 캡처해 두세요."
             ),
             source_ref=FSC_2024_02_01,

@@ -118,7 +118,8 @@ def _run_analysis(client, case_id: str, auth: dict[str, str], **body) -> dict:
     res = client.post(f"{API}/cases/{case_id}/analysis-runs", json=body, headers=auth)
     assert res.status_code == 202, res.text
     run_id = res.json()["runId"]
-    end = time.monotonic() + 10
+    # PNG 전처리(tesseract를 부르기 전)가 장당 몇 초 걸려 PC가 바쁘면 10초를 넘는다(#90)
+    end = time.monotonic() + 30
     while time.monotonic() < end:
         run = client.get(f"{API}/cases/{case_id}/analysis-runs/{run_id}", headers=auth).json()
         if run["status"] != "RUNNING":
