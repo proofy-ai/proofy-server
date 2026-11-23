@@ -316,7 +316,7 @@ erDiagram
 | `based_on_input_version` | INTEGER | 필수 | 시작할 때의 `cases.input_version`. 다르면 결과 `isStale: true` |
 | `status` | VARCHAR(16) | 필수 | `RUNNING` · `SUCCEEDED` · `FAILED` (기술 상태) |
 | `stage` | VARCHAR(16) | 필수 | `EXTRACTING` · `COMPARING` · `DRAFTING` · `FINISHED` (화면 단계) |
-| `steps_json` | JSON | 필수, 기본 `[]` | 4번 화면 `steps` + 도구 호출 기록(도구가 **실제로 돌려준 거래 ID** 포함 → 후검증 기준) |
+| `steps_json` | JSON | 필수, 기본 `[]` | 4번 화면 `steps`(`seq`·`type`·`title`·`summary`·`status`·`at`). 도구가 돌려준 거래 ID는 저장하지 않고 실행 중 메모리에서 후검증한다 |
 | `error_code` · `error_message` | VARCHAR | NULL | `AGENT_FAILED` · `AGENT_TIMEOUT` · `AGENT_REFUSED` |
 | `precomputed` | BOOLEAN | 필수, 기본 false | 샘플 사건에서 AI 대신 미리 만든 결과를 썼나(T11) |
 | `referral_json` | JSON | NULL | 상담 안내 `{code, matchedPhrases}`. 있으면 초안을 만들지 않고, 사건에 남아 있던 이전 초안을 지운다(T10) |
@@ -355,8 +355,8 @@ erDiagram
 
 **서버 검증기(T17)가 확인하는 것** (FK로는 못 막는 것)
 1. 가리키는 증빙·거래가 **같은 사건** 소속인가
-2. `transaction_id`가 **이번 실행의 도구가 실제로 돌려준 ID**인가(`analysis_runs.steps_json`)
-3. `quoted_text`가 **마스킹한 글**에 실제로 있는가(공백 무시 부분 문자열). `EVIDENCE`는 `evidence.regions_json[region_index].maskedText`, `NARRATIVE`는 `analysis_runs.masked_narrative`와 대조한다. 원문(`text`)과 대조하면 AI가 본 가린 글(`김*수`)이 모두 불일치가 된다
+2. `transaction_id`가 **이번 실행의 도구가 실제로 돌려준 ID**인가(실행 중 에이전트가 모아 둔 목록. DB에는 남기지 않는다)
+3. `quoted_text`가 **마스킹한 글**에 실제로 있는가(공백 무시 부분 문자열). `EVIDENCE`는 그 서류의 마스킹한 글 전체(`evidence.masked_text`, 줄 단위 아님), `NARRATIVE`는 `analysis_runs.masked_narrative`와 대조한다. 원문(`text`)과 대조하면 AI가 본 가린 글(`김*수`)이 모두 불일치가 된다
 4. 실패한 근거는 지우지 않고 `is_verified=false`, 연결된 초안 문장은 "확인 필요"
 
 ### 3.8 `checklist_items` — 준비 서류 체크 (T04, AI 권장은 T08)
